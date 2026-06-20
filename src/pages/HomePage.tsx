@@ -84,7 +84,7 @@ const HomePage = () => {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{competition.name} · {competition.region}</p>
-                    <h1 ref={titleRef} tabIndex={-1} className="font-display text-xl font-bold leading-tight outline-none md:text-2xl">
+                    <h1 ref={titleRef} tabIndex={-1} className="font-display text-xl font-bold leading-tight outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:text-2xl">
                       {homeTeam.name} <span className="text-muted-foreground">vs</span> {awayTeam.name}
                     </h1>
                     <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
