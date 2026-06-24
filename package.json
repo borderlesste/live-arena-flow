@@ -16,7 +16,7 @@
     "build:dev": "next build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json",
     "lint": "eslint .",
-    "start": "next start -p 8080",
+    "start": "node scripts/start-production.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest"

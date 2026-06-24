@@ -137,21 +137,17 @@ function toPublicSponsor(sponsor: ManagedSponsor): Sponsor {
 export async function listSponsors(): Promise<Sponsor[]> {
   if (!isSupabaseConfigured) return fetch(`${API_BASE}/sponsors`).then(responseJson<Sponsor[]>);
   const client = await getSupabaseClient();
-  const now = new Date().toISOString();
-  let { data, error }: { data: SponsorRow[] | null; error: { message: string; code?: string } | null } = await client.from("sponsors").select(sponsorColumns)
-    .eq("status", "active").is("deleted_at", null)
-    .or(`starts_at.is.null,starts_at.lte.${now}`).or(`ends_at.is.null,ends_at.gt.${now}`)
+  const { data, error }: { data: SponsorRow[] | null; error: { message: string; code?: string } | null } = await client.from("sponsors")
+    .select(sponsorLegacyColumns)
+    .eq("status", "active")
+    .is("deleted_at", null)
     .order("priority", { ascending: false });
-  if (isMissingSponsorColumn(error)) {
-    const legacy = await client.from("sponsors").select(sponsorLegacyColumns)
-      .eq("status", "active").is("deleted_at", null)
-      .or(`starts_at.is.null,starts_at.lte.${now}`).or(`ends_at.is.null,ends_at.gt.${now}`)
-      .order("priority", { ascending: false });
-    data = legacy.data as unknown as SponsorRow[] | null;
-    error = legacy.error;
-  }
-  if (error) throw new Error(error.message);
-  return (data as unknown as SponsorRow[]).map(fromRow).map(toPublicSponsor);
+  if (error) return fetch(`${API_BASE}/sponsors`).then(responseJson<Sponsor[]>);
+  const now = Date.now();
+  return (data as unknown as SponsorRow[])
+    .filter((row) => (!row.starts_at || new Date(row.starts_at).getTime() <= now) && (!row.ends_at || new Date(row.ends_at).getTime() > now))
+    .map(fromRow)
+    .map(toPublicSponsor);
 }
 
 export async function listManagedSponsors(token: string): Promise<ManagedSponsor[]> {

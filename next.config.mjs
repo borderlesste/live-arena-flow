@@ -1,4 +1,3 @@
-const apiOrigin = process.env.API_INTERNAL_URL || "http://127.0.0.1:8787";
 const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const publicSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
 
@@ -12,9 +11,6 @@ const nextConfig = {
   },
   allowedDevOrigins: ["127.0.0.1"],
   experimental: { webpackBuildWorker: false },
-  async rewrites() {
-    return [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }];
-  },
   async headers() {
     return [{
       source: "/(.*)",
