@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import { Menu, Search, Globe, LogIn, Play, Radio } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Menu, Search, Globe, LogIn, Play } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { SPORT_OPTIONS } from "@/lib/sports";
-import { toast } from "sonner";
 
 const NAV = [
   { to: "/", label: "Inicio", end: true },
@@ -22,18 +22,25 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const [lang, setLang] = useState("es");
   const [sport, setSport] = useState("all");
+  const [search, setSearch] = useState("");
   const loc = useLocation();
+  const navigate = useNavigate();
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (sport !== "all") params.set("sport", sport);
+    navigate(`/matches${params.size ? `?${params.toString()}` : ""}`);
+    setOpen(false);
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 glass-strong">
-      <div className="container mx-auto flex h-16 items-center gap-2 px-4 md:gap-4 md:px-6">
-        <Link to="/" className="group flex items-center gap-2 no-tap-highlight" aria-label="Arena Live Sports — inicio">
-          <span className="grid h-9 w-9 place-items-center rounded-md bg-gradient-primary shadow-glow">
-            <Radio className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
-          </span>
-          <span className="hidden font-display text-base font-bold leading-none sm:block">
-            Arena<span className="text-primary">.</span>Live
-          </span>
+      <div className="container mx-auto flex h-20 items-center gap-2 px-4 md:gap-4 md:px-6">
+        <Link to="/" className="flex shrink-0 items-center no-tap-highlight" aria-label="Luis Romero Fútbol — inicio">
+          <BrandLogo variant="white" size="md" priority decorative className="hidden sm:block" />
+          <BrandLogo variant="white" size="md" withWordmark={false} priority decorative className="sm:hidden" />
         </Link>
 
         <nav aria-label="Principal" className="ml-2 hidden items-center gap-1 lg:flex">
@@ -55,7 +62,7 @@ export function Header() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden xl:block">
+          <div className="hidden 2xl:block">
             <Select value={sport} onValueChange={setSport}>
               <SelectTrigger className="h-9 w-[140px] bg-surface/60" aria-label="Seleccionar deporte">
                 <SelectValue />
@@ -68,21 +75,17 @@ export function Header() {
             </Select>
           </div>
 
-          <div className="relative hidden md:block">
+          <form className="relative hidden md:block" role="search" onSubmit={submitSearch}>
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               type="search"
               placeholder="Buscar equipo, competición…"
               className="h-9 w-[200px] bg-surface/60 pl-8"
               aria-label="Buscar"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  toast.info("Búsqueda demo", { description: "Conecta un backend para resultados reales." });
-                }
-              }}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
             />
-          </div>
+          </form>
 
           <Select value={lang} onValueChange={setLang}>
             <SelectTrigger className="hidden h-9 w-[78px] bg-surface/60 md:flex" aria-label="Idioma">
@@ -95,12 +98,9 @@ export function Header() {
             </SelectContent>
           </Select>
 
-          <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={() => toast.info("Iniciar sesión (demo)", { description: "Requiere backend de autenticación." })}>
-            <LogIn className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Iniciar sesión
-          </Button>
+          <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex"><Link to="/profile"><LogIn className="mr-1.5 h-4 w-4" aria-hidden="true" />Mi perfil</Link></Button>
 
-          <Button asChild size="sm" className="hidden bg-gradient-primary text-primary-foreground hover:opacity-90 md:inline-flex">
+          <Button asChild size="sm" className="hidden md:inline-flex">
             <Link to="/live">
               <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Ver en vivo
@@ -115,9 +115,13 @@ export function Header() {
             </SheetTrigger>
             <SheetContent side="left" className="w-[88vw] max-w-sm bg-card p-0">
               <SheetHeader className="border-b border-border px-5 py-4 text-left">
-                <SheetTitle className="font-display">Arena Live Sports</SheetTitle>
+                <SheetTitle><BrandLogo variant="white" size="md" decorative /></SheetTitle>
               </SheetHeader>
               <nav aria-label="Menú móvil" className="flex flex-col p-2">
+                <form role="search" onSubmit={submitSearch} className="relative mb-2">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar equipo o competición" className="pl-9" aria-label="Buscar partidos" />
+                </form>
                 {NAV.map((item) => (
                   <NavLink
                     key={item.to}
@@ -135,10 +139,8 @@ export function Header() {
                   </NavLink>
                 ))}
                 <div className="my-2 border-t border-border" />
-                <Button variant="ghost" className="justify-start" onClick={() => { setOpen(false); toast.info("Iniciar sesión (demo)"); }}>
-                  <LogIn className="mr-2 h-4 w-4" /> Iniciar sesión
-                </Button>
-                <Button asChild className="mt-2 bg-gradient-primary text-primary-foreground">
+                <Button asChild variant="ghost" className="justify-start"><Link to="/profile" onClick={() => setOpen(false)}><LogIn className="mr-2 h-4 w-4" /> Mi perfil</Link></Button>
+                <Button asChild className="mt-2">
                   <Link to="/live" onClick={() => setOpen(false)}>
                     <Play className="mr-2 h-4 w-4" /> Ver en vivo
                   </Link>

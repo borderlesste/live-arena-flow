@@ -1,0 +1,18 @@
+{
+  "name": "Luis Romero Fútbol",
+  "short_name": "Luis Romero",
+  "description": "Transmisiones, partidos, resultados y contenido deportivo en Luis Romero Fútbol.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050805",
+  "theme_color": "#012501",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/brand/symbols/symbol-green-dark.png",
+      "sizes": "5906x5843",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

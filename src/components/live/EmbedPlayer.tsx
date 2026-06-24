@@ -30,20 +30,20 @@ export function EmbedPlayer({ embedUrl, title, requiresConsent, className }: Emb
 
   if (!accepted) {
     return (
-      <div className={className + " grid place-items-center bg-surface-2 p-6"}>
-        <div className="max-w-md space-y-4 text-center">
-          <Shield className="mx-auto h-8 w-8 text-primary" aria-hidden="true" />
+      <div className={className + " grid place-items-center bg-surface-2 px-4 pb-14 pt-14 sm:p-6"}>
+        <div data-testid="embed-consent-content" className="max-w-md space-y-2 text-center sm:space-y-4">
+          <Shield className="mx-auto hidden h-8 w-8 text-primary sm:block" aria-hidden="true" />
           <div>
-            <p className="font-display text-base font-semibold">Esta transmisión es de un tercero</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="font-display text-sm font-semibold sm:text-base">Esta transmisión es de un tercero</p>
+            <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
               Al continuar, el proveedor externo puede instalar cookies y recopilar datos según su política.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <Button onClick={() => setAccepted(true)} className="bg-gradient-primary text-primary-foreground">
+            <Button onClick={() => setAccepted(true)}>
               Aceptar y ver
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
               <a href={embedUrl} target="_blank" rel="noopener noreferrer">
                 Abrir en origen <ExternalLink className="ml-1 h-3 w-3" />
               </a>

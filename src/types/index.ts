@@ -1,4 +1,4 @@
-// Core domain types for Arena Live Sports
+// Core domain types for Luis Romero Fútbol
 
 export type Sport = "football" | "basketball" | "baseball" | "volleyball" | "other";
 
@@ -11,7 +11,15 @@ export type MatchStatus =
   | "postponed"
   | "cancelled";
 
-export type StreamType = "youtube" | "tiktok" | "hls" | "webrtc" | "html5" | "iframe";
+export type StreamType =
+  | "youtube"
+  | "youtube_live"
+  | "embed"
+  | "iframe"
+  | "mp4"
+  | "mp3"
+  | "hls"
+  | "obs_hls";
 
 export type StreamStatus =
   | "idle"
@@ -31,6 +39,7 @@ export interface Team {
   monogram: string;
   /** HSL color tuple `h s% l%` — used as a CSS var. */
   color: string;
+  badgeUrl?: string;
 }
 
 export interface Competition {
@@ -43,6 +52,7 @@ export interface Competition {
   color: string;
   activeMatches: number;
   nextEventAt?: string; // ISO
+  badgeUrl?: string;
 }
 
 export interface StandingRow {
@@ -68,6 +78,14 @@ export interface StreamSource {
   /** True for third-party providers that drop cookies. */
   requiresConsent?: boolean;
   provider?: "youtube" | "tiktok" | "vimeo" | "custom";
+  purpose?: "live" | "highlight";
+  obs?: OBSIngestConfig;
+}
+
+export interface OBSIngestConfig {
+  protocol: "rtmp" | "srt";
+  serverUrl: string;
+  streamKey?: string;
 }
 
 export interface Match {
@@ -85,6 +103,7 @@ export interface Match {
   venue: string;
   viewers?: number;
   streams: StreamSource[];
+  highlights?: StreamSource[];
   hasReplay?: boolean;
   hasSummary?: boolean;
 }
@@ -104,7 +123,7 @@ export interface ChatMessage {
   createdAt: string; // ISO
   pinned?: boolean;
   channel: "community" | "official";
-  /** Local reaction counts, mocked. */
+  /** Reaction counts supplied by the platform API. */
   reactions?: Record<string, number>;
 }
 
@@ -113,6 +132,9 @@ export interface Sponsor {
   name: string;
   tagline?: string;
   url?: string;
+  logoUrl?: string;
+  darkLogoUrl?: string;
+  altText?: string;
   monogram: string;
   color: string;
   tier: "main" | "official" | "partner";

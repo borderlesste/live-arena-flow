@@ -2,73 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Arena Live Sports — Design System
-   All colors HSL. Never use raw hex / tailwind color utilities in components. */
+/* Luis Romero Fútbol — official brand design tokens.
+   Component colors use HSL variables; source brand values are documented below. */
 
 @layer base {
   :root {
-    /* Surfaces */
-    --background: 210 25% 5%;            /* near-black with cool tint */
-    --foreground: 0 0% 98%;
-    --surface: 215 28% 9%;
-    --surface-2: 215 25% 12%;
-    --card: 215 30% 8%;
-    --card-foreground: 0 0% 98%;
-    --popover: 215 30% 9%;
-    --popover-foreground: 0 0% 98%;
+    /* Official palette: #77A608, #628C04, #355700, #012501. */
+    --brand-lime: 80 91% 34%;
+    --brand-green: 86 94% 28%;
+    --brand-green-dark: 83 100% 17%;
+    --brand-green-deep: 120 95% 7%;
 
-    /* Brand */
-    --primary: 142 90% 55%;              /* neon green */
-    --primary-foreground: 215 35% 6%;
-    --primary-glow: 142 95% 65%;
+    --background: 120 23% 3%;
+    --background-deep: 120 95% 7%;
+    --foreground: 0 0% 100%;
+    --surface: 127 29% 6%;
+    --surface-2: 126 23% 9%;
+    --card: 127 29% 6%;
+    --card-foreground: 0 0% 100%;
+    --popover: 126 23% 9%;
+    --popover-foreground: 0 0% 100%;
 
-    --secondary: 215 25% 16%;
-    --secondary-foreground: 0 0% 98%;
+    --primary: var(--brand-lime);
+    --primary-hover: var(--brand-green);
+    --primary-active: var(--brand-green-dark);
+    --primary-foreground: 0 0% 0%;
+    --primary-glow: var(--brand-lime);
 
-    --muted: 215 22% 14%;
-    --muted-foreground: 215 12% 70%;
+    --secondary: 126 23% 9%;
+    --secondary-foreground: 0 0% 100%;
 
-    --accent: 195 90% 55%;               /* cyan accent */
-    --accent-foreground: 215 35% 6%;
+    --muted: 126 19% 12%;
+    --muted-foreground: 120 8% 74%;
 
-    --live: 0 85% 58%;                   /* live red */
+    --accent: var(--brand-green-dark);
+    --accent-foreground: 0 0% 100%;
+
+    --live: 353 86% 54%;
     --live-foreground: 0 0% 100%;
-    --warning: 38 95% 58%;
-    --warning-foreground: 215 35% 6%;
-    --success: 142 70% 45%;
+    --warning: 40 90% 61%;
+    --warning-foreground: 120 95% 7%;
+    --success: var(--brand-lime);
 
-    --destructive: 0 70% 50%;
+    --destructive: 1 77% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 20% 18%;
-    --border-strong: 215 20% 26%;
-    --input: 215 22% 14%;
-    --ring: 142 90% 55%;
+    --border: 120 8% 16%;
+    --border-strong: 80 76% 18%;
+    --input: 126 19% 12%;
+    --ring: var(--brand-lime);
 
     --radius: 0.75rem;
 
     /* Gradients */
-    --gradient-hero: radial-gradient(1200px 600px at 20% -10%, hsl(142 90% 55% / 0.15), transparent 60%),
-                     radial-gradient(900px 500px at 100% 0%, hsl(195 90% 55% / 0.12), transparent 60%),
-                     linear-gradient(180deg, hsl(215 30% 7%) 0%, hsl(210 25% 5%) 100%);
-    --gradient-surface: linear-gradient(180deg, hsl(215 28% 11%) 0%, hsl(215 30% 8%) 100%);
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-glow)) 100%);
-    --gradient-live: linear-gradient(135deg, hsl(0 85% 58%) 0%, hsl(15 90% 55%) 100%);
+    --gradient-hero: radial-gradient(circle at top right, hsl(var(--brand-lime) / 0.12), transparent 35%),
+                     linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background-deep)) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(var(--surface-2)) 0%, hsl(var(--surface)) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(var(--brand-lime)) 0%, hsl(var(--brand-green)) 100%);
+    --gradient-live: linear-gradient(135deg, hsl(var(--live)) 0%, hsl(1 77% 48%) 100%);
 
     /* Shadows */
-    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 10px 40px -10px hsl(var(--primary) / 0.45);
+    --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.32), 0 10px 40px -14px hsl(var(--primary) / 0.32);
     --shadow-elegant: 0 20px 60px -20px hsl(0 0% 0% / 0.6);
     --shadow-card: 0 6px 24px -10px hsl(0 0% 0% / 0.5);
 
     /* Sidebar (kept for shadcn sidebar) */
-    --sidebar-background: 215 30% 8%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 142 90% 55%;
-    --sidebar-primary-foreground: 215 35% 6%;
-    --sidebar-accent: 215 25% 14%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 215 20% 18%;
-    --sidebar-ring: 142 90% 55%;
+    --sidebar-background: var(--brand-green-deep);
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: var(--brand-lime);
+    --sidebar-primary-foreground: var(--brand-green-deep);
+    --sidebar-accent: var(--brand-green-dark);
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 120 8% 16%;
+    --sidebar-ring: var(--brand-lime);
   }
 
   .dark {
@@ -103,13 +109,13 @@
 
 @layer components {
   .glass {
-    background: hsl(215 30% 10% / 0.7);
+    background: hsl(var(--surface-2) / 0.72);
     backdrop-filter: blur(12px) saturate(120%);
     -webkit-backdrop-filter: blur(12px) saturate(120%);
     border: 1px solid hsl(0 0% 100% / 0.06);
   }
   .glass-strong {
-    background: hsl(215 30% 8% / 0.85);
+    background: hsl(var(--background-deep) / 0.90);
     backdrop-filter: blur(16px) saturate(140%);
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     border: 1px solid hsl(0 0% 100% / 0.08);

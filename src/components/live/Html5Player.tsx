@@ -1,10 +1,15 @@
 interface Html5PlayerProps {
   src: string;
+  audioOnly?: boolean;
   poster?: string;
   className?: string;
+  onError?: () => void;
 }
 
-export function Html5Player({ src, poster, className }: Html5PlayerProps) {
+export function Html5Player({ src, audioOnly = false, poster, className, onError }: Html5PlayerProps) {
+  if (audioOnly) {
+    return <audio src={src} controls onError={onError} className={className} aria-label="Reproductor de audio" />;
+  }
   return (
     <video
       src={src}
@@ -12,6 +17,7 @@ export function Html5Player({ src, poster, className }: Html5PlayerProps) {
       muted
       playsInline
       controls
+      onError={onError}
       className={className}
       aria-label="Reproductor de vídeo"
     />

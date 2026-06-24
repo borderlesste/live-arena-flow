@@ -1,9 +1,10 @@
 import { Providers } from "@/app/Providers";
 import { AppRouter } from "@/app/AppRouter";
+import { BrandProvider } from "@/components/brand/BrandProvider";
 
 const App = () => (
   <Providers>
-    <AppRouter />
+    <BrandProvider><AppRouter /></BrandProvider>
   </Providers>
 );
 

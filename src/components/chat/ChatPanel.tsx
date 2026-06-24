@@ -3,23 +3,28 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Send, Smile, Flag, Users, Pin, ShieldAlert, ArrowDown, WifiOff } from "lucide-react";
+import { Send, Flag, Users, Pin, ShieldAlert, ArrowDown, WifiOff } from "lucide-react";
 import { useChat } from "@/hooks/useChat";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types";
+import { reportChatMessage } from "@/services/chat.service";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { usePresence } from "@/hooks/usePresence";
 
 const EMOJIS = ["⚽", "🏀", "🔥", "👏", "🎉", "💪", "😂", "😮", "🤩", "❤️"];
 
 interface ChatPanelProps {
   className?: string;
   matchTitle?: string;
+  roomKey?: string;
 }
 
-export function ChatPanel({ className, matchTitle }: ChatPanelProps) {
-  const { messages, send, slowModeRemaining, pinned } = useChat();
+export function ChatPanel({ className, matchTitle, roomKey = "global" }: ChatPanelProps) {
+  const { messages, send, slowModeRemaining, pinned } = useChat(roomKey);
+  const onlineCount = usePresence();
   const [channel, setChannel] = useState<"community" | "official">("community");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -60,8 +65,8 @@ export function ChatPanel({ className, matchTitle }: ChatPanelProps) {
     setShowJump(false);
   }
 
-  function submit() {
-    const res = send(text, channel);
+  async function submit() {
+    const res = await send(text, channel);
     if (!res.ok) { setError(res.error ?? "Error"); return; }
     setError(null);
     setText("");
@@ -71,7 +76,7 @@ export function ChatPanel({ className, matchTitle }: ChatPanelProps) {
   function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      submit();
+      void submit();
     }
   }
 
@@ -79,7 +84,7 @@ export function ChatPanel({ className, matchTitle }: ChatPanelProps) {
     setText((t) => (t + em).slice(0, 280));
   }
 
-  const usersCount = new Set(messages.map((m) => m.user.id)).size + 1240;
+  const usersCount = isSupabaseConfigured ? onlineCount : new Set(messages.map((m) => m.user.id)).size;
 
   return (
     <aside className={cn("surface-card flex h-full min-h-0 flex-col overflow-hidden rounded-xl", className)} aria-label="Chat en vivo">
@@ -154,8 +159,8 @@ export function ChatPanel({ className, matchTitle }: ChatPanelProps) {
                 <Button
                   type="button"
                   size="icon"
-                  className="h-10 w-10 bg-gradient-primary text-primary-foreground"
-                  onClick={submit}
+                  className="h-10 w-10"
+                  onClick={() => void submit()}
                   disabled={slowModeRemaining > 0 || !online || text.trim().length === 0}
                   aria-label="Enviar mensaje"
                 >
@@ -211,22 +216,14 @@ function ChatMessageItem({ message }: { message: ChatMessage }) {
         </p>
         <p className="break-words text-sm text-foreground/95">{message.text}</p>
         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <Tooltip>
+          {isSupabaseConfigured ? <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" onClick={() => toast.info("Reacciones demo")} className="rounded p-0.5 hover:bg-surface-2" aria-label="Reaccionar">
-                <Smile className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Reaccionar</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={() => toast.success("Mensaje reportado (demo)")} className="rounded p-0.5 hover:bg-surface-2" aria-label="Reportar">
+              <button type="button" onClick={() => void reportChatMessage(message.id).then(() => toast.success("Mensaje reportado")).catch((error) => toast.error(error instanceof Error ? error.message : "No se pudo reportar"))} className="rounded p-0.5 hover:bg-surface-2" aria-label="Reportar">
                 <Flag className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Reportar</TooltipContent>
-          </Tooltip>
+          </Tooltip> : null}
         </div>
       </div>
     </div>

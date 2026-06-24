@@ -19,12 +19,14 @@ const ITEMS: { value: MatchFilter; label: string }[] = [
 interface Props {
   value: MatchFilter;
   onChange: (v: MatchFilter) => void;
+  showStatusFilters?: boolean;
 }
 
-export function MatchFilters({ value, onChange }: Props) {
+export function MatchFilters({ value, onChange, showStatusFilters = true }: Props) {
+  const items = showStatusFilters ? ITEMS : ITEMS.filter((item) => !["upcoming", "finished"].includes(item.value));
   return (
     <div className="flex w-full gap-2 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Filtrar partidos">
-      {ITEMS.map((it) => {
+      {items.map((it) => {
         const active = value === it.value;
         return (
           <Button
@@ -33,7 +35,7 @@ export function MatchFilters({ value, onChange }: Props) {
             variant={active ? "default" : "secondary"}
             role="tab"
             aria-selected={active}
-            className={cn("shrink-0", active && "bg-gradient-primary text-primary-foreground")}
+            className={cn("shrink-0", active && "bg-primary text-primary-foreground hover:bg-primary-hover")}
             onClick={() => onChange(it.value)}
           >
             {it.label}

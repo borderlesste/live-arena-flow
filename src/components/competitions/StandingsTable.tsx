@@ -1,11 +1,10 @@
 import { TeamBadge } from "@/components/matches/TeamBadge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getTeam } from "@/data/mocks";
-import type { StandingRow } from "@/types";
+import type { StandingRow, Team } from "@/types";
 
-interface Props { rows: StandingRow[] }
+interface Props { rows: StandingRow[]; teams: Team[] }
 
-export function StandingsTable({ rows }: Props) {
+export function StandingsTable({ rows, teams }: Props) {
   return (
     <div className="surface-card overflow-x-auto rounded-xl">
       <Table>
@@ -23,7 +22,8 @@ export function StandingsTable({ rows }: Props) {
         </TableHeader>
         <TableBody>
           {rows.map((r) => {
-            const team = getTeam(r.teamId);
+            const team = teams.find((item) => item.id === r.teamId);
+            if (!team) return null;
             return (
               <TableRow key={r.teamId} className="border-border">
                 <TableCell className="sticky left-0 bg-card font-semibold">{r.position}</TableCell>

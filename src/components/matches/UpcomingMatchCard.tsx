@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import { TeamBadge } from "./TeamBadge";
 import { Button } from "@/components/ui/button";
-import { Bell, MapPin } from "lucide-react";
+import { Bell, Check, MapPin } from "lucide-react";
 import { formatMatchDate } from "@/lib/format";
 import { SPORT_LABEL } from "@/lib/sports";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useFavoriteMatch } from "@/hooks/useFavoriteMatch";
 import type { Match, Team, Competition } from "@/types";
 
 interface Props {
@@ -16,45 +16,40 @@ interface Props {
 }
 
 export function UpcomingMatchCard({ match, homeTeam, awayTeam, competition }: Props) {
-  const [reminded, setReminded] = useState(false);
-  async function remind() {
-    setReminded(true);
-    if ("Notification" in window) {
-      try {
-        const perm = await Notification.requestPermission();
-        if (perm === "granted") {
-          toast.success("Te avisaremos cuando empiece", { description: `${homeTeam.shortName} vs ${awayTeam.shortName}` });
-          return;
-        }
-      } catch { /* ignore */ }
+  const followed = useFavoriteMatch(match.id);
+  async function toggleFollow() {
+    try {
+      const next = await followed.toggle();
+      toast.success(next ? "Partido guardado en tu perfil" : "Partido retirado de tu perfil");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo actualizar el partido");
     }
-    toast.info("Recordatorio guardado", { description: "Activa las notificaciones del navegador para alertas en tiempo real." });
   }
   return (
-    <article className="surface-card flex flex-col gap-3 rounded-xl p-4">
-      <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
-        <span>{competition.name} · {SPORT_LABEL[match.sport]}</span>
-        <span>{formatMatchDate(match.startsAt)}</span>
+    <article className="surface-card flex min-w-0 flex-col gap-3 overflow-hidden rounded-xl p-4">
+      <div className="flex min-w-0 items-center justify-between gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+        <span className="min-w-0 truncate">{competition.name} · {SPORT_LABEL[match.sport]}</span>
+        <span className="shrink-0">{formatMatchDate(match.startsAt)}</span>
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <TeamBadge team={homeTeam} size="md" />
           <span className="truncate font-display text-sm font-semibold">{homeTeam.name}</span>
         </div>
-        <span className="text-xs font-semibold uppercase text-muted-foreground">vs</span>
-        <div className="flex flex-1 items-center justify-end gap-2">
+        <span className="shrink-0 text-xs font-semibold uppercase text-muted-foreground">vs</span>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           <span className="truncate text-right font-display text-sm font-semibold">{awayTeam.name}</span>
           <TeamBadge team={awayTeam} size="md" />
         </div>
       </div>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{match.venue}</span>
-        <span className="text-success">Disponible para retransmisión</span>
+      <div className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <span className="flex min-w-0 items-center gap-1.5"><MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{match.venue}</span></span>
+        <span className={`shrink-0 ${match.streams.length > 0 ? "text-success" : "text-muted-foreground"}`}>{match.streams.length > 0 ? "Fuente configurada" : "Sin fuente configurada"}</span>
       </div>
-      <div className="mt-1 flex items-center gap-2">
-        <Button variant={reminded ? "secondary" : "outline"} size="sm" onClick={remind} aria-pressed={reminded}>
-          <Bell className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {reminded ? "Recordatorio activo" : "Recordarme"}
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <Button variant={followed.favorite ? "secondary" : "outline"} size="sm" onClick={() => void toggleFollow()} aria-pressed={followed.favorite}>
+          {followed.favorite ? <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Bell className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+          {followed.favorite ? "Siguiendo" : "Seguir"}
         </Button>
         <Button asChild variant="ghost" size="sm" className="ml-auto">
           <Link to={`/match/${match.id}`}>Ver detalles</Link>

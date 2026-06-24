@@ -64,7 +64,7 @@ export function LiveMatchCard({ match, homeTeam, awayTeam, competition, isActive
           <Button
             size="sm"
             variant={isActive ? "default" : "secondary"}
-            className={cn(isActive && "bg-gradient-primary text-primary-foreground")}
+            className={cn(isActive && "bg-primary text-primary-foreground hover:bg-primary-hover")}
             onClick={() => onSelect(match.id)}
           >
             <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />

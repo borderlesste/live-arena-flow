@@ -9,20 +9,15 @@ export const EMBED_ALLOWLIST = [
   "www.tiktok.com",
 ] as const;
 
-// Domains allowed for direct media (HLS / HTML5).
-export const MEDIA_ALLOWLIST = [
-  "test-streams.mux.dev",
-  "stream.mux.com",
-  "demo.unified-streaming.com",
-  "commondatastorage.googleapis.com",
-] as const;
-
-const httpsUrl = z
+const playableUrl = z
   .string()
   .url()
-  .refine((u) => u.startsWith("https://"), { message: "Solo se permiten URLs https" });
+  .refine((u) => {
+    const url = new URL(u);
+    return url.protocol === "https:" || (["localhost", "127.0.0.1"].includes(url.hostname) && url.protocol === "http:");
+  }, { message: "Usa HTTPS o HTTP únicamente para servidores locales" });
 
-export const embedUrlSchema = httpsUrl.refine(
+export const embedUrlSchema = playableUrl.refine(
   (u) => {
     try {
       const host = new URL(u).hostname;
@@ -34,22 +29,12 @@ export const embedUrlSchema = httpsUrl.refine(
   { message: "Dominio de embed no permitido" },
 );
 
-export const mediaUrlSchema = httpsUrl.refine(
-  (u) => {
-    try {
-      const host = new URL(u).hostname;
-      return (MEDIA_ALLOWLIST as readonly string[]).includes(host);
-    } catch {
-      return false;
-    }
-  },
-  { message: "Dominio de media no permitido" },
-);
+export const mediaUrlSchema = playableUrl;
 
 export const streamSourceSchema = z
   .object({
     id: z.string().min(1),
-    type: z.enum(["youtube", "tiktok", "hls", "webrtc", "html5", "iframe"]),
+    type: z.enum(["youtube", "youtube_live", "embed", "iframe", "mp4", "mp3", "hls", "obs_hls"]),
     url: z.string().url().optional(),
     embedUrl: z.string().url().optional(),
     title: z.string().min(1).max(160),
@@ -58,7 +43,7 @@ export const streamSourceSchema = z
     provider: z.enum(["youtube", "tiktok", "vimeo", "custom"]).optional(),
   })
   .superRefine((src, ctx) => {
-    if (["hls", "html5", "webrtc"].includes(src.type)) {
+    if (["hls", "obs_hls", "mp4", "mp3"].includes(src.type)) {
       const parsed = mediaUrlSchema.safeParse(src.url);
       if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error.issues[0]?.message ?? "URL inválida", path: ["url"] });
     } else {

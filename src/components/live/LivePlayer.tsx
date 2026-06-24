@@ -5,12 +5,13 @@ import { Html5Player } from "./Html5Player";
 import { Scoreboard } from "./Scoreboard";
 import { PlayerControls } from "./PlayerControls";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { ErrorState, EmptyState } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useLiveStream, type DemoState } from "@/hooks/useLiveStream";
+import { useLiveStream } from "@/hooks/useLiveStream";
 import { pickAdapter } from "@/services/streaming.service";
-import { AlertTriangle, WifiOff, RefreshCw, Tv, Ban, Bug } from "lucide-react";
+import { AlertTriangle, WifiOff, RefreshCw, Ban } from "lucide-react";
 import type { Match, StreamSource, Team } from "@/types";
 
 interface LivePlayerProps {
@@ -21,19 +22,8 @@ interface LivePlayerProps {
   onChangeStream?: (streamId: string) => void;
 }
 
-const DEMO_LABEL: Record<DemoState, string> = {
-  auto: "Auto",
-  active: "Activo",
-  offline: "Sin transmisión",
-  error: "Error",
-  reconnecting: "Reconectando",
-  blocked: "Embed bloqueado",
-  skeleton: "Skeleton",
-};
-
 export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChangeStream }: LivePlayerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [demo, setDemo] = useState<DemoState>("auto");
   const [selectedStreamId, setSelectedStreamId] = useState<string | undefined>(match.streams[0]?.id);
 
   const source: StreamSource | undefined = useMemo(
@@ -41,7 +31,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
     [match.streams, selectedStreamId],
   );
 
-  const { status, retry } = useLiveStream(source, demo);
+  const { status, retry } = useLiveStream(source);
   const adapter = source ? pickAdapter(source) : "unsupported";
 
   function handleSelect(v: string) {
@@ -49,10 +39,16 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
     onChangeStream?.(v);
   }
 
+  function handleSourceError() {
+    const currentIndex = match.streams.findIndex((item) => item.id === source?.id);
+    const fallback = match.streams[currentIndex + 1];
+    if (fallback) handleSelect(fallback.id);
+  }
+
   return (
     <div ref={containerRef} className="surface-card relative overflow-hidden rounded-xl shadow-glow">
-      <div className="relative aspect-video w-full bg-black">
-        {renderPlayerBody({ status, adapter, source, retry })}
+      <div className="relative aspect-[4/3] w-full bg-black sm:aspect-video">
+        {renderPlayerBody({ status, adapter, source, retry, onSourceError: handleSourceError })}
 
         {/* Overlay (top) */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/60 to-transparent">
@@ -60,7 +56,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
         </div>
 
         {/* Overlay (bottom) */}
-        <div className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-between gap-2 p-3 md:p-4">
+        <div className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-end gap-2 p-2 sm:justify-between sm:p-3 md:p-4">
           <div className="pointer-events-auto flex items-center gap-2">
             {match.streams.length > 1 ? (
               <Select value={source?.id} onValueChange={handleSelect}>
@@ -74,17 +70,6 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
                 </SelectContent>
               </Select>
             ) : null}
-            <Select value={demo} onValueChange={(v) => setDemo(v as DemoState)}>
-              <SelectTrigger className="h-9 w-[150px] bg-black/55 ring-1 ring-white/10" aria-label="Estado de demostración">
-                <Bug className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(DEMO_LABEL) as DemoState[]).map((d) => (
-                  <SelectItem key={d} value={d}>{DEMO_LABEL[d]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <PlayerControls containerRef={containerRef} />
         </div>
@@ -94,16 +79,16 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
 }
 
 function renderPlayerBody({
-  status, adapter, source, retry,
-}: { status: string; adapter: ReturnType<typeof pickAdapter>; source: StreamSource | undefined; retry: () => void; }) {
+  status, adapter, source, retry, onSourceError,
+}: { status: string; adapter: ReturnType<typeof pickAdapter>; source: StreamSource | undefined; retry: () => void; onSourceError: () => void; }) {
   if (status === "loading") {
-    return <SkeletonLoader className="absolute inset-0 h-full w-full rounded-none" />;
+    return <div className="absolute inset-0 grid place-items-center"><SkeletonLoader className="absolute inset-0 h-full w-full rounded-none" /><BrandLogo variant="white" size="lg" withWordmark={false} decorative className="relative z-10 animate-pulse opacity-80" /></div>;
   }
   if (status === "offline" || !source) {
     return (
       <div className="absolute inset-0 grid place-items-center bg-surface-2 px-6">
         <EmptyState
-          icon={<Tv className="h-8 w-8" />}
+          icon={<BrandLogo variant="white" size="lg" withWordmark={false} decorative className="opacity-80" />}
           title="No hay transmisión disponible"
           description="Este partido aún no está en directo. Vuelve más tarde o elige otro evento."
         />
@@ -151,10 +136,10 @@ function renderPlayerBody({
 
   // Active
   if (adapter === "hls" && source.url) {
-    return <HlsPlayer src={source.url} className="absolute inset-0 h-full w-full object-cover" />;
+    return <HlsPlayer src={source.url} onStatusChange={(next) => { if (next === "error") onSourceError(); }} className="absolute inset-0 h-full w-full object-cover" />;
   }
   if (adapter === "html5" && source.url) {
-    return <Html5Player src={source.url} className="absolute inset-0 h-full w-full object-cover" />;
+    return <Html5Player src={source.url} audioOnly={source.type === "mp3"} onError={onSourceError} className={source.type === "mp3" ? "absolute inset-x-6 bottom-1/2 w-[calc(100%-3rem)] translate-y-1/2" : "absolute inset-0 h-full w-full object-cover"} />;
   }
   if (adapter === "embed" && source.embedUrl) {
     return (

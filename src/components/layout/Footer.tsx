@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Radio, Github, Twitter, Youtube } from "lucide-react";
+import { Github, Twitter, Youtube } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 const SECTIONS: { title: string; links: { to: string; label: string }[] }[] = [
   {
@@ -33,15 +34,12 @@ const SECTIONS: { title: string; links: { to: string; label: string }[] }[] = [
 
 export function Footer() {
   return (
-    <footer className="mt-16 border-t border-border bg-surface/40">
+    <footer className="mt-16 border-t border-border bg-background-deep/90">
       <div className="container mx-auto px-4 py-12 md:px-6">
         <div className="grid gap-10 md:grid-cols-4">
           <div>
-            <Link to="/" className="flex items-center gap-2" aria-label="Inicio">
-              <span className="grid h-9 w-9 place-items-center rounded-md bg-gradient-primary shadow-glow">
-                <Radio className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
-              </span>
-              <span className="font-display text-base font-bold">Arena<span className="text-primary">.</span>Live</span>
+            <Link to="/" className="inline-flex items-center" aria-label="Luis Romero Fútbol — inicio">
+              <BrandLogo variant="white" size="lg" decorative />
             </Link>
             <p className="mt-3 max-w-xs text-sm text-muted-foreground">
               Deporte en directo, marcadores, comunidad y todo lo que necesitas para no perderte un solo segundo.
@@ -74,7 +72,7 @@ export function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row md:items-center">
-          <p>© {new Date().getFullYear()} Arena Live Sports. Todos los nombres y equipos son ficticios.</p>
+          <p>© {new Date().getFullYear()} Luis Romero Fútbol. Datos deportivos suministrados por TheSportsDB.</p>
           <p>Hecho con pasión por el deporte.</p>
         </div>
       </div>

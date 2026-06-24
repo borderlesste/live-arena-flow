@@ -8,7 +8,7 @@ interface SeoMeta {
 export function useDocumentMeta({ title, description }: SeoMeta): void {
   useEffect(() => {
     const prevTitle = document.title;
-    document.title = `${title} · Arena Live Sports`;
+    document.title = `${title} · Luis Romero Fútbol`;
     let metaDesc: HTMLMetaElement | null = null;
     let prevDesc: string | null = null;
     if (description) {
