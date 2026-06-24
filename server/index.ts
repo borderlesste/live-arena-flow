@@ -11,7 +11,8 @@ import type { StreamSource } from "../src/types/index.js";
 import { embedUrlSchema, mediaUrlSchema } from "../src/schemas/stream.schema.js";
 import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.schema.js";
 
-const PORT = Number(process.env.API_PORT || 8787);
+const PORT = Number(process.env.PORT || process.env.API_PORT || 8787);
+const HOST = process.env.HOST || "0.0.0.0";
 const APP_ORIGIN = process.env.APP_ORIGIN || "http://localhost:8080";
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN?.trim();
 const STREAM_SECRET_KEY = process.env.STREAM_SECRET_KEY || "";
@@ -740,6 +741,6 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Luis Romero Fútbol API listening on http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Luis Romero Futbol API listening on http://${HOST}:${PORT}`);
 });
