@@ -5,7 +5,7 @@ const publicSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || proce
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
-  distDir: process.env.NEXT_DIST_DIR || (process.env.NODE_ENV === "production" ? ".next-build" : ".next"),
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   env: {
     NEXT_PUBLIC_SUPABASE_URL: publicSupabaseUrl,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: publicSupabaseAnonKey,
