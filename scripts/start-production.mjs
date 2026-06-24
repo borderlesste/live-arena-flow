@@ -12,8 +12,12 @@ const cli = (packageName, relativeBin, fallback) => {
 };
 
 const webPort = process.env.PORT || process.env.WEB_PORT || "8080";
-const apiPort = process.env.API_PORT || (webPort === "8787" ? "8788" : "8787");
-const apiOrigin = process.env.API_INTERNAL_URL || `http://127.0.0.1:${apiPort}`;
+const configuredApiOrigin = process.env.API_INTERNAL_URL ? new URL(process.env.API_INTERNAL_URL) : undefined;
+const configuredApiPort = configuredApiOrigin?.hostname === "127.0.0.1" || configuredApiOrigin?.hostname === "localhost"
+  ? configuredApiOrigin.port
+  : undefined;
+const apiPort = process.env.API_PORT || configuredApiPort || (webPort === "8787" ? "8788" : "8787");
+const apiOrigin = `http://127.0.0.1:${apiPort}`;
 
 const children = [];
 let stopping = false;
@@ -51,14 +55,37 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 const tsx = cli("tsx", join("dist", "cli.mjs"), "tsx");
 const next = cli("next", join("dist", "bin", "next"), "next");
 
-start("api", tsx.command, [...tsx.args, "server/index.ts"], {
-  API_PORT: apiPort,
-  API_INTERNAL_URL: apiOrigin,
-  HOST: process.env.API_HOST || "127.0.0.1",
-});
+async function waitForApi() {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${apiOrigin}/api/health`);
+      if (response.ok) return;
+      lastError = new Error(`API health returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw lastError instanceof Error ? lastError : new Error("API did not become healthy");
+}
 
-start("web", next.command, [...next.args, "start", "-p", webPort], {
-  API_INTERNAL_URL: apiOrigin,
-});
+async function main() {
+  start("api", tsx.command, [...tsx.args, "server/index.ts"], {
+    API_PORT: apiPort,
+    API_INTERNAL_URL: apiOrigin,
+    HOST: process.env.API_HOST || "127.0.0.1",
+  });
+  await waitForApi();
+  start("web", next.command, [...next.args, "start", "-p", webPort], {
+    API_INTERNAL_URL: apiOrigin,
+  });
+  console.log(`Production services started: web=http://0.0.0.0:${webPort}, api=${apiOrigin}`);
+}
 
-console.log(`Production services started: web=http://0.0.0.0:${webPort}, api=${apiOrigin}`);
+main().catch((error) => {
+  console.error(error);
+  shutdown("SIGTERM");
+  process.exit(1);
+});
