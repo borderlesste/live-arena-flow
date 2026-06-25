@@ -45,6 +45,11 @@ function formatUtm(value: Record<string, string>): string {
   return new URLSearchParams(value).toString();
 }
 
+function optionalText(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export default function AdminSponsorsPage() {
   useDocumentMeta({ title: "Patrocinadores", description: "Gestiona campañas, ubicaciones y métricas de patrocinadores." });
   const auth = useAuth();
@@ -160,6 +165,11 @@ export default function AdminSponsorsPage() {
             <div className="grid grid-cols-2 gap-3"><Field label="Inicio"><Input type="datetime-local" value={toLocalDateTime(form.startsAt)} onChange={(event) => update("startsAt", fromLocalDateTime(event.target.value))} /></Field><Field label="Fin"><Input type="datetime-local" value={toLocalDateTime(form.endsAt)} onChange={(event) => update("endsAt", fromLocalDateTime(event.target.value))} /></Field></div>
             <div className="grid grid-cols-2 gap-3"><Field label="Prioridad"><Input type="number" min="0" value={form.priority} onChange={(event) => update("priority", Number(event.target.value))} /></Field><Field label="Posición"><Input value={form.position} onChange={(event) => update("position", event.target.value)} /></Field></div>
             <Field label="Campaña"><Input value={form.campaign ?? ""} onChange={(event) => update("campaign", event.target.value || undefined)} /></Field>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Field label="Competicion ID"><Input value={form.competitionId ?? ""} onChange={(event) => update("competitionId", optionalText(event.target.value))} placeholder="UUID" /></Field>
+              <Field label="Partido ID"><Input value={form.matchId ?? ""} onChange={(event) => update("matchId", optionalText(event.target.value))} placeholder="UUID" /></Field>
+              <Field label="Stream ID"><Input value={form.streamId ?? ""} onChange={(event) => update("streamId", optionalText(event.target.value))} placeholder="UUID" /></Field>
+            </div>
             <Field label="Dispositivos"><div className="flex flex-wrap gap-2">{devices.map((device) => <Button key={device} type="button" size="sm" variant={form.devices.includes(device) ? "default" : "outline"} onClick={() => update("devices", form.devices.includes(device) ? form.devices.filter((item) => item !== device) : [...form.devices, device])}>{device}</Button>)}</div></Field>
             <Field label="UTM"><Input value={formatUtm(form.utm)} onChange={(event) => update("utm", parseUtm(event.target.value))} placeholder="utm_source=arena&utm_campaign=final" /></Field>
             <div className="grid grid-cols-2 gap-3"><Field label="Máx. impresiones"><Input type="number" min="1" value={form.maxImpressions ?? ""} onChange={(event) => update("maxImpressions", event.target.value ? Number(event.target.value) : undefined)} /></Field><Field label="Máx. clics"><Input type="number" min="1" value={form.maxClicks ?? ""} onChange={(event) => update("maxClicks", event.target.value ? Number(event.target.value) : undefined)} /></Field></div>

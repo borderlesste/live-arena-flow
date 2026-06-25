@@ -10,6 +10,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { StreamSource } from "../src/types/index.js";
 import { embedUrlSchema, mediaUrlSchema } from "../src/schemas/stream.schema.js";
 import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.schema.js";
+import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
 
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -283,6 +284,57 @@ function publicSponsors(sponsors: Awaited<ReturnType<typeof readStore>>["sponsor
       color: sponsorColor(sponsor.id),
       tier: sponsor.type,
     }));
+}
+
+async function listManagedSponsorsPayload(): Promise<ManagedSponsor[]> {
+  if (!canUseAdminSupabase()) return (await readStore()).sponsors.map(normalizeManagedSponsor);
+  const { data, error } = await getAdminSupabaseClient()
+    .from("sponsors")
+    .select(sponsorColumns)
+    .is("deleted_at", null)
+    .order("priority", { ascending: false });
+  if (isMissingSponsorColumn(error)) throw new Error("La tabla sponsors no tiene todos los campos administrativos. Ejecuta las migraciones de Supabase.");
+  if (error) throw error;
+  return (data as unknown as SponsorRow[]).map(sponsorFromRow);
+}
+
+async function saveManagedSponsorPayload(sponsor: ManagedSponsor): Promise<ManagedSponsor[]> {
+  if (!canUseAdminSupabase()) {
+    const storedSponsor = {
+      ...sponsor,
+      tagline: sponsor.description,
+      url: sponsor.destinationUrl,
+      monogram: sponsorMonogram(sponsor.name),
+      color: sponsorColor(sponsor.id),
+      tier: sponsor.type,
+    };
+    const data = await updateStore((store) => {
+      const index = store.sponsors.findIndex((item) => item.id === sponsor.id);
+      if (index >= 0) store.sponsors[index] = storedSponsor;
+      else store.sponsors.push(storedSponsor);
+    });
+    return data.sponsors.map(normalizeManagedSponsor);
+  }
+  const { error } = await getAdminSupabaseClient()
+    .from("sponsors")
+    .upsert(sponsorToRow(sponsor), { onConflict: "id" });
+  if (isMissingSponsorColumn(error)) throw new Error("La tabla sponsors no tiene todos los campos administrativos. Ejecuta las migraciones de Supabase.");
+  if (error) throw error;
+  return listManagedSponsorsPayload();
+}
+
+async function deleteManagedSponsorPayload(id: string): Promise<ManagedSponsor[]> {
+  if (!canUseAdminSupabase()) {
+    const data = await updateStore((store) => { store.sponsors = store.sponsors.filter((item) => item.id !== id); });
+    return data.sponsors.map(normalizeManagedSponsor);
+  }
+  const { error } = await getAdminSupabaseClient()
+    .from("sponsors")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (isMissingSponsorColumn(error)) throw new Error("La tabla sponsors no tiene todos los campos administrativos. Ejecuta las migraciones de Supabase.");
+  if (error) throw error;
+  return listManagedSponsorsPayload();
 }
 
 function getAdminSupabaseClient() {
@@ -593,31 +645,17 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/sponsors") return json(response, 200, publicSponsors((await readStore()).sponsors));
     if (request.method === "GET" && url.pathname === "/api/admin/sponsors") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      return json(response, 200, (await readStore()).sponsors.map(normalizeManagedSponsor));
+      return json(response, 200, await listManagedSponsorsPayload());
     }
     if (request.method === "PUT" && url.pathname === "/api/admin/sponsors") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       const sponsor = sponsorAdminSchema.parse(await readBody(request));
-      const storedSponsor = {
-        ...sponsor,
-        tagline: sponsor.description,
-        url: sponsor.destinationUrl,
-        monogram: sponsorMonogram(sponsor.name),
-        color: sponsorColor(sponsor.id),
-        tier: sponsor.type,
-      };
-      const data = await updateStore((store) => {
-        const index = store.sponsors.findIndex((item) => item.id === sponsor.id);
-        if (index >= 0) store.sponsors[index] = storedSponsor;
-        else store.sponsors.push(storedSponsor);
-      });
-      return json(response, 200, data.sponsors.map(normalizeManagedSponsor));
+      return json(response, 200, await saveManagedSponsorPayload(sponsor));
     }
     const sponsorMatch = url.pathname.match(/^\/api\/admin\/sponsors\/([^/]+)$/);
     if (request.method === "DELETE" && sponsorMatch) {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const data = await updateStore((store) => { store.sponsors = store.sponsors.filter((item) => item.id !== sponsorMatch[1]); });
-      return json(response, 200, data.sponsors.map(normalizeManagedSponsor));
+      return json(response, 200, await deleteManagedSponsorPayload(sponsorMatch[1]));
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/users") {
@@ -736,6 +774,7 @@ const server = createServer(async (request, response) => {
     return json(response, 404, { error: "Ruta no encontrada" });
   } catch (error) {
     if (error instanceof z.ZodError) return json(response, 400, { error: "Datos inválidos", issues: error.issues });
+    if (error instanceof Error && error.message.startsWith("La tabla sponsors")) return json(response, 500, { error: error.message });
     console.error(error);
     return json(response, 500, { error: "Error interno" });
   }
