@@ -83,7 +83,7 @@ export interface StreamSource {
 }
 
 export interface OBSIngestConfig {
-  protocol: "rtmp" | "srt";
+  protocol: "rtmp" | "rtmps" | "srt";
   serverUrl: string;
   streamKey?: string;
 }

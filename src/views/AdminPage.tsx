@@ -35,7 +35,7 @@ interface FormState {
   type: Extract<StreamType, "hls" | "obs_hls" | "mp4" | "mp3" | "youtube" | "youtube_live" | "embed" | "iframe">;
   playbackUrl: string;
   obsEnabled: boolean;
-  obsProtocol: "rtmp" | "srt";
+  obsProtocol: "rtmp" | "rtmps" | "srt";
   obsServerUrl: string;
   obsStreamKey: string;
 }
@@ -82,6 +82,11 @@ function mergeSportsBundles(...bundles: SportsDataBundle[]): SportsDataBundle {
     teams: [...teams.values()],
     competitions: [...competitions.values()],
   };
+}
+
+function protocolFromIngestUrl(value: string): FormState["obsProtocol"] | undefined {
+  const protocol = value.match(/^([a-z0-9+.-]+):\/\//i)?.[1]?.toLowerCase();
+  return protocol === "rtmp" || protocol === "rtmps" || protocol === "srt" ? protocol : undefined;
 }
 
 const AdminPage = () => {
@@ -165,8 +170,12 @@ const AdminPage = () => {
     if (!matchId) return toast.error("Selecciona un partido");
     if (!token || !canAdmin) return toast.error("Tu cuenta no tiene permisos administrativos");
     if (!parsed.success) return toast.error(parsed.error.issues[0]?.message ?? "Fuente inválida");
-    if (form.obsEnabled && !form.obsServerUrl.match(/^(rtmp|rtmps|srt):\/\//i)) {
+    const ingestProtocol = protocolFromIngestUrl(form.obsServerUrl);
+    if (form.obsEnabled && !ingestProtocol) {
       return toast.error("La dirección de ingestión debe comenzar por rtmp://, rtmps:// o srt://");
+    }
+    if (form.obsEnabled && ingestProtocol !== form.obsProtocol) {
+      return toast.error("El protocolo OBS debe coincidir con la URL de ingestión");
     }
     try {
       const updated = await saveManagedVideoSource({
@@ -229,7 +238,7 @@ const AdminPage = () => {
       <Alert className="border-warning/30 bg-warning/5">
         <RadioTower className="h-4 w-4" />
         <AlertTitle>OBS publica; el navegador reproduce</AlertTitle>
-        <AlertDescription>Configura en OBS la dirección RTMP/SRT y su clave. Añade también la salida HTTPS HLS o MP4 entregada por MediaMTX, Mux o Cloudflare Stream. Las credenciales se guardan en backend y no se incluyen en la respuesta pública.</AlertDescription>
+        <AlertDescription>Configura en OBS la dirección RTMP/RTMPS/SRT y su clave. Añade también la salida HTTPS HLS o MP4 entregada por MediaMTX, Mux o Cloudflare Stream. Las credenciales se guardan en backend y no se incluyen en la respuesta pública.</AlertDescription>
       </Alert>
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
@@ -266,9 +275,9 @@ const AdminPage = () => {
             <div className="rounded-lg border border-border bg-surface-2/40 p-4">
               <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">Publicar con OBS</p><p className="text-xs text-muted-foreground">Añade datos de ingestión para el operador.</p></div><Switch checked={form.obsEnabled} onCheckedChange={(value) => update("obsEnabled", value)} /></div>
               {form.obsEnabled ? <div className="mt-4 space-y-3">
-                <Field label="Protocolo"><Select value={form.obsProtocol} onValueChange={(value) => update("obsProtocol", value as FormState["obsProtocol"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="rtmp">RTMP</SelectItem><SelectItem value="srt">SRT</SelectItem></SelectContent></Select></Field>
-                <Field label="Servidor de ingestión"><Input value={form.obsServerUrl} onChange={(event) => update("obsServerUrl", event.target.value)} placeholder="rtmp://ingest.example.com/live" /></Field>
-                <Field label="Clave de transmisión"><Input type="password" value={form.obsStreamKey} onChange={(event) => update("obsStreamKey", event.target.value)} placeholder="••••••••••••" /></Field>
+                <Field label="Protocolo"><Select value={form.obsProtocol} onValueChange={(value) => update("obsProtocol", value as FormState["obsProtocol"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="rtmp">RTMP</SelectItem><SelectItem value="rtmps">RTMPS</SelectItem><SelectItem value="srt">SRT</SelectItem></SelectContent></Select></Field>
+                <Field label="Servidor de ingestión"><Input value={form.obsServerUrl} onChange={(event) => update("obsServerUrl", event.target.value)} placeholder="rtmps://ingest.example.com/live" /></Field>
+                <Field label="Clave de transmisión"><Input type="password" value={form.obsStreamKey} onChange={(event) => update("obsStreamKey", event.target.value)} placeholder={form.id ? "Dejar vacío para conservar la clave guardada" : "••••••••••••"} /></Field>
               </div> : null}
             </div>
             <div className="flex gap-2"><Button className="flex-1" onClick={save}>{form.id ? "Guardar cambios" : "Crear fuente"}</Button>{form.id ? <Button variant="ghost" onClick={reset}>Cancelar</Button> : null}</div>
@@ -282,7 +291,7 @@ const AdminPage = () => {
               <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Video className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-display font-semibold">{source.title}</p><Badge variant="outline">{source.type.toUpperCase()}</Badge><Badge variant="secondary">{source.purpose === "highlight" ? "Highlight" : "En vivo"}</Badge>{source.obs ? <Badge className="bg-success/15 text-success hover:bg-success/20">OBS</Badge> : null}</div><p className="truncate text-sm text-muted-foreground">{eventLabel(source.matchId)}</p><p className="mt-1 truncate font-mono text-xs text-muted-foreground">{source.url ?? source.embedUrl}</p></div>
-                {source.obs ? <div className="flex gap-1"><Button size="icon" variant="ghost" aria-label="Copiar servidor OBS" onClick={() => copy(source.obs!.serverUrl, "Dirección OBS")}><Copy className="h-4 w-4" /></Button>{source.obs.streamKey ? <Button size="icon" variant="ghost" aria-label="Copiar clave OBS" onClick={() => copy(source.obs!.streamKey!, "Clave OBS")}><RadioTower className="h-4 w-4" /></Button> : null}</div> : null}
+                {source.obs ? <div className="flex items-center gap-1"><Button size="icon" variant="ghost" aria-label="Copiar servidor OBS" onClick={() => copy(source.obs!.serverUrl, "Dirección OBS")}><Copy className="h-4 w-4" /></Button>{source.obs.hasStreamKey ? <Badge variant="outline">Clave guardada</Badge> : null}</div> : null}
                 <div className="flex gap-1"><Button size="icon" variant="ghost" aria-label="Editar fuente" onClick={() => edit(source)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-destructive" aria-label="Eliminar fuente" onClick={() => remove(source.id)}><Trash2 className="h-4 w-4" /></Button></div>
               </CardContent>
             </Card>

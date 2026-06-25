@@ -10,7 +10,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { StreamSource } from "../src/types/index.js";
 import { embedUrlSchema, mediaUrlSchema } from "../src/schemas/stream.schema.js";
 import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.schema.js";
-import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
+import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorLegacyColumns, sponsorToLegacyRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
 
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -60,7 +60,7 @@ const streamPayloadBaseSchema = z.object({
   provider: z.enum(["youtube", "tiktok", "vimeo", "custom"]).optional(),
   purpose: z.enum(["live", "highlight"]).optional(),
   obs: z.object({
-    protocol: z.enum(["rtmp", "srt"]),
+    protocol: z.enum(["rtmp", "rtmps", "srt"]),
     serverUrl: z.string().min(1),
     streamKey: z.string().optional(),
   }).optional(),
@@ -74,11 +74,25 @@ function validateStreamPayload(source: z.infer<typeof streamPayloadBaseSchema>, 
   const parsed = embedUrlSchema.safeParse(source.embedUrl);
   if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error.issues[0]?.message ?? "URL de embed inválida", path: ["embedUrl"] });
 }
+function validateObsIngest(source: z.infer<typeof streamPayloadBaseSchema>, ctx: z.RefinementCtx) {
+  if (!source.obs) return;
+  let parsed: URL;
+  try {
+    parsed = new URL(source.obs.serverUrl);
+  } catch {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "URL de ingestión OBS inválida", path: ["obs", "serverUrl"] });
+    return;
+  }
+  const protocol = parsed.protocol.replace(":", "");
+  if (protocol !== source.obs.protocol) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "El protocolo OBS debe coincidir con la URL de ingestión", path: ["obs", "serverUrl"] });
+  }
+}
 const videoSourceSchema = streamPayloadBaseSchema.extend({
   matchId: z.string().min(1),
   createdAt: z.string(),
-}).superRefine(validateStreamPayload);
-const managedStreamSchema = streamPayloadBaseSchema.superRefine(validateStreamPayload);
+}).superRefine(validateStreamPayload).superRefine(validateObsIngest);
+const managedStreamSchema = streamPayloadBaseSchema.superRefine(validateStreamPayload).superRefine(validateObsIngest);
 const newsSchema = z.object({ id: z.string(), title: z.string(), category: z.string(), excerpt: z.string(), publishedAt: z.string(), imageHue: z.number() });
 const highlightSchema = z.object({ id: z.string(), title: z.string(), matchId: z.string().optional(), durationSec: z.number(), publishedAt: z.string(), imageHue: z.number(), kind: z.enum(["summary", "play", "clip", "interview", "replay"]) });
 const chatSchema = z.object({ text: z.string().trim().min(1).max(280), channel: z.enum(["community", "official"]), clientId: z.string().min(1).max(80), displayName: z.string().min(1).max(40) });
@@ -288,12 +302,21 @@ function publicSponsors(sponsors: Awaited<ReturnType<typeof readStore>>["sponsor
 
 async function listManagedSponsorsPayload(): Promise<ManagedSponsor[]> {
   if (!canUseAdminSupabase()) return (await readStore()).sponsors.map(normalizeManagedSponsor);
-  const { data, error } = await getAdminSupabaseClient()
+  const supabase = getAdminSupabaseClient();
+  const { data, error } = await supabase
     .from("sponsors")
     .select(sponsorColumns)
     .is("deleted_at", null)
     .order("priority", { ascending: false });
-  if (isMissingSponsorColumn(error)) throw new Error("La tabla sponsors no tiene todos los campos administrativos. Ejecuta las migraciones de Supabase.");
+  if (isMissingSponsorColumn(error)) {
+    const fallback = await supabase
+      .from("sponsors")
+      .select(sponsorLegacyColumns)
+      .is("deleted_at", null)
+      .order("priority", { ascending: false });
+    if (fallback.error) throw fallback.error;
+    return (fallback.data as unknown as SponsorRow[]).map(sponsorFromRow);
+  }
   if (error) throw error;
   return (data as unknown as SponsorRow[]).map(sponsorFromRow);
 }
@@ -315,10 +338,17 @@ async function saveManagedSponsorPayload(sponsor: ManagedSponsor): Promise<Manag
     });
     return data.sponsors.map(normalizeManagedSponsor);
   }
-  const { error } = await getAdminSupabaseClient()
+  const supabase = getAdminSupabaseClient();
+  const { error } = await supabase
     .from("sponsors")
     .upsert(sponsorToRow(sponsor), { onConflict: "id" });
-  if (isMissingSponsorColumn(error)) throw new Error("La tabla sponsors no tiene todos los campos administrativos. Ejecuta las migraciones de Supabase.");
+  if (isMissingSponsorColumn(error)) {
+    const fallback = await supabase
+      .from("sponsors")
+      .upsert(sponsorToLegacyRow(sponsor), { onConflict: "id" });
+    if (fallback.error) throw fallback.error;
+    return listManagedSponsorsPayload();
+  }
   if (error) throw error;
   return listManagedSponsorsPayload();
 }

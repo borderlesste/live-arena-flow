@@ -47,7 +47,7 @@ test.describe("seguridad de endpoints admin de live", () => {
     expect(Array.isArray(body.issues)).toBe(true);
   });
 
-  test("no expone stream keys OBS al listar fuentes gestionadas", async ({ request }) => {
+  test("acepta RTMPS y no expone stream keys OBS al listar fuentes gestionadas", async ({ request }) => {
     const id = `qa_security_obs_${Date.now()}`;
     try {
       const response = await request.put("/api/admin/video-sources", {
@@ -55,8 +55,8 @@ test.describe("seguridad de endpoints admin de live", () => {
         data: qaSource({
           id,
           obs: {
-            protocol: "rtmp",
-            serverUrl: "rtmp://ingest.example.com/live",
+            protocol: "rtmps",
+            serverUrl: "rtmps://ingest.example.com/live",
             streamKey: "qa-secret-stream-key",
           },
         }),
@@ -72,5 +72,21 @@ test.describe("seguridad de endpoints admin de live", () => {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
     }
+  });
+
+  test("rechaza OBS cuando el protocolo no coincide con la URL de ingesta", async ({ request }) => {
+    const response = await request.put("/api/admin/video-sources", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: qaSource({
+        obs: {
+          protocol: "rtmp",
+          serverUrl: "rtmps://ingest.example.com/live",
+          streamKey: "qa-secret-stream-key",
+        },
+      }),
+    });
+    expect(response.status()).toBe(400);
+    const body = await response.json();
+    expect(JSON.stringify(body)).toContain("protocolo OBS");
   });
 });

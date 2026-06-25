@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sponsorFromRow, sponsorToRow } from "./sponsor.persistence";
+import { sponsorFromRow, sponsorToLegacyRow, sponsorToRow } from "./sponsor.persistence";
 import type { ManagedSponsor } from "./sponsor.schema";
 
 const sponsor: ManagedSponsor = {
@@ -43,5 +43,28 @@ describe("sponsor persistence mapping", () => {
       max_clicks: 50,
     });
     expect(sponsorFromRow(row)).toEqual(sponsor);
+  });
+
+  it("can write only legacy sponsor columns when admin fields are missing", () => {
+    const row = sponsorToLegacyRow(sponsor);
+
+    expect(row).toMatchObject({
+      id: sponsor.id,
+      name: sponsor.name,
+      logo_url: sponsor.logoUrl,
+      dark_logo_url: sponsor.darkLogoUrl,
+      alt_text: sponsor.altText,
+      destination_url: sponsor.destinationUrl,
+      description: sponsor.description,
+      status: sponsor.status,
+      priority: sponsor.priority,
+      starts_at: sponsor.startsAt,
+      ends_at: sponsor.endsAt,
+      deleted_at: null,
+    });
+    expect(row).not.toHaveProperty("sponsor_type");
+    expect(row).not.toHaveProperty("enabled_devices");
+    expect(row).not.toHaveProperty("campaign");
+    expect(row).not.toHaveProperty("max_impressions");
   });
 });

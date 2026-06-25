@@ -91,3 +91,20 @@ export function sponsorToRow(sponsor: ManagedSponsor) {
     deleted_at: null,
   };
 }
+
+export function sponsorToLegacyRow(sponsor: ManagedSponsor) {
+  return {
+    id: sponsor.id,
+    name: sponsor.name,
+    logo_url: sponsor.logoUrl,
+    dark_logo_url: sponsor.darkLogoUrl ?? null,
+    alt_text: sponsor.altText,
+    destination_url: sponsor.destinationUrl ?? null,
+    description: sponsor.description ?? null,
+    status: sponsor.status,
+    priority: sponsor.priority,
+    starts_at: sponsor.startsAt ?? null,
+    ends_at: sponsor.endsAt ?? null,
+    deleted_at: null,
+  };
+}
