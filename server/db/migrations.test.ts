@@ -10,6 +10,7 @@ const protectedTables = [
   "chat_messages", "chat_moderation_actions", "audit_logs", "app_settings",
   "chat_message_reports",
   "user_favorite_matches",
+  "live_sources",
 ];
 
 async function readMigrationSet() {
@@ -46,12 +47,13 @@ describe("Supabase migrations", () => {
   }, 20_000);
 
   it("enables RLS on every sensitive table", async () => {
-    const sql = await Promise.all([
-      readFile(resolve("supabase/migrations/20260621113100_auth_and_rls.sql"), "utf8"),
-      readFile(resolve("supabase/migrations/20260621140000_realtime_chat_presence.sql"), "utf8"),
-    ]).then((files) => files.join("\n"));
+    // RLS is spread across multiple migration files — read all of them
+    const allMigrations = await readMigrationSet();
+    const sql = allMigrations.map((m) => m.sql).join("\n");
     for (const table of protectedTables) {
-      expect(sql).toContain(`alter table public.${table} enable row level security;`);
+      expect(sql, `Expected RLS to be enabled on public.${table}`).toContain(
+        `alter table public.${table} enable row level security;`,
+      );
     }
   });
 

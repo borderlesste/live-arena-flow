@@ -1,0 +1,40 @@
+export type LiveInputStatus =
+  | "provisioning"
+  | "ready"
+  | "connecting"
+  | "live"
+  | "disconnected"
+  | "disabled"
+  | "error";
+
+export interface CreatedLiveInput {
+  provider: string;
+  providerInputId: string;
+  ingestProtocol: "rtmps" | "rtmp" | "srt";
+  ingestUrl: string;
+  streamKey: string;
+  playbackFormat: "hls" | "dash";
+  playbackUrl: string | null;
+  status: LiveInputStatus;
+}
+
+export interface CreateLiveInputInput {
+  name: string;
+  recordingEnabled?: boolean;
+  lowLatencyEnabled?: boolean;
+}
+
+export interface RotatedLiveInputCredentials {
+  streamKey: string;
+  ingestUrl: string;
+}
+
+export interface LiveStreamProvider {
+  readonly name: string;
+  createLiveInput(input: CreateLiveInputInput): Promise<CreatedLiveInput>;
+  getLiveInputStatus(providerInputId: string): Promise<LiveInputStatus>;
+  disableLiveInput(providerInputId: string): Promise<void>;
+  enableLiveInput(providerInputId: string): Promise<void>;
+  deleteLiveInput(providerInputId: string): Promise<void>;
+  rotateCredentials?(providerInputId: string): Promise<RotatedLiveInputCredentials>;
+}

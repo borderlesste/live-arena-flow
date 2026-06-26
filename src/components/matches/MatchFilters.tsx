@@ -1,16 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type MatchFilter =
-  | "all" | "football" | "basketball" | "baseball" | "volleyball"
-  | "live" | "upcoming" | "finished";
+export type MatchFilter = "all" | "football" | "live" | "upcoming" | "finished";
 
 const ITEMS: { value: MatchFilter; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "football", label: "Fútbol" },
-  { value: "basketball", label: "Baloncesto" },
-  { value: "baseball", label: "Béisbol" },
-  { value: "volleyball", label: "Voleibol" },
   { value: "live", label: "En vivo" },
   { value: "upcoming", label: "Próximos" },
   { value: "finished", label: "Finalizados" },

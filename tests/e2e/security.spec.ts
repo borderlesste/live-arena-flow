@@ -16,6 +16,23 @@ function qaSource(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function qaStream(overrides: Record<string, unknown> = {}) {
+  return {
+    id: `qa_stream_${Date.now()}`,
+    type: "obs_hls",
+    url: "https://cdn.example.com/live/index.m3u8",
+    title: "qa_obs_stream",
+    isExternal: false,
+    purpose: "live",
+    obs: {
+      protocol: "rtmps",
+      serverUrl: "rtmps://ingest.example.com/live",
+      ...overrides.obs,
+    },
+    ...overrides,
+  };
+}
+
 test.describe("seguridad de endpoints admin de live", () => {
   test("rechaza mutaciones admin sin sesion", async ({ request }) => {
     const response = await request.put("/api/admin/video-sources", { data: qaSource() });
@@ -69,6 +86,36 @@ test.describe("seguridad de endpoints admin de live", () => {
       expect(JSON.stringify(created)).not.toContain("qa-secret-stream-key");
     } finally {
       await request.delete(`/api/admin/video-sources/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    }
+  });
+
+  test("crea un stream OBS con clave generada y no la expone en listados posteriores", async ({ request }) => {
+    const id = `qa_stream_${Date.now()}`;
+    try {
+      const response = await request.put("/api/admin/streams", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        data: qaStream({ id }),
+      });
+      expect(response.ok()).toBe(true);
+      const streams = await response.json();
+      const created = streams.find((stream: { id: string }) => stream.id === id);
+      expect(created).toBeTruthy();
+      expect(created.obs?.hasStreamKey).toBe(true);
+      expect(typeof created.obs?.streamKey).toBe("string");
+
+      const listResponse = await request.get("/api/admin/streams", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      expect(listResponse.ok()).toBe(true);
+      const listedStreams = await listResponse.json();
+      const listed = listedStreams.find((stream: { id: string }) => stream.id === id);
+      expect(listed).toBeTruthy();
+      expect(listed.obs?.hasStreamKey).toBe(true);
+      expect(listed.obs?.streamKey).toBeUndefined();
+    } finally {
+      await request.delete(`/api/admin/streams/${encodeURIComponent(id)}`, {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
     }

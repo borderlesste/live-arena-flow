@@ -1,6 +1,6 @@
 // Core domain types for Luis Romero Fútbol
 
-export type Sport = "football" | "basketball" | "baseball" | "volleyball" | "other";
+export type Sport = "football";
 
 export type MatchStatus =
   | "scheduled"
@@ -77,7 +77,8 @@ export interface StreamSource {
   isExternal: boolean;
   /** True for third-party providers that drop cookies. */
   requiresConsent?: boolean;
-  provider?: "youtube" | "tiktok" | "vimeo" | "custom";
+  /** Known embed providers; use "custom" or any string for other providers. */
+  provider?: "youtube" | "tiktok" | "vimeo" | "custom" | (string & {});
   purpose?: "live" | "highlight";
   obs?: OBSIngestConfig;
 }

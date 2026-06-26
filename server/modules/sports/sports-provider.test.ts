@@ -123,8 +123,9 @@ describe("TheSportsDbProvider", () => {
     const events = await new TheSportsDbProvider("test", new ResilientHttpClient()).eventsByDate("2026-06-21");
     expect(events[0]).toMatchObject({ id: "event-1", status: "scheduled" });
     expect(events[0].homeTeam.badgeUrl).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get("s"))).toEqual(["Soccer", "Basketball", "Baseball", "Volleyball"]);
+    // Only Soccer is queried now (football-only platform)
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get("s"))).toEqual(["Soccer"]);
     fetchMock.mockRestore();
   });
 

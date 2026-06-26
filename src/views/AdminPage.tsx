@@ -1,68 +1,38 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Pencil, Plus, RadioTower, Trash2, Video } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useLiveSportsWindow, useSportsDate, useSportsWindow } from "@/hooks/useSportsData";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
-import { ErrorState, EmptyState } from "@/components/feedback/States";
-import { streamSourceSchema } from "@/schemas/stream.schema";
-import {
-  deleteManagedVideoSource,
-  listManagedVideoSources,
-  saveManagedVideoSource,
-  type ManagedVideoSource,
-} from "@/services/video-sources.service";
-import type { StreamType } from "@/types";
+import { ErrorState } from "@/components/feedback/States";
 import { getSessionToken } from "@/services/auth.service";
 import { BrandSettingsPanel } from "@/components/admin/BrandSettingsPanel";
 import type { SportsDataBundle } from "@/services/sports-data.mapper";
-
-interface FormState {
-  id?: string;
-  matchId: string;
-  title: string;
-  purpose: "live" | "highlight";
-  type: Extract<StreamType, "hls" | "obs_hls" | "mp4" | "mp3" | "youtube" | "youtube_live" | "embed" | "iframe">;
-  playbackUrl: string;
-  obsEnabled: boolean;
-  obsProtocol: "rtmp" | "rtmps" | "srt";
-  obsServerUrl: string;
-  obsStreamKey: string;
-}
-
-const emptyForm: FormState = {
-  matchId: "",
-  title: "Transmisión principal",
-  purpose: "live",
-  type: "hls",
-  playbackUrl: "",
-  obsEnabled: false,
-  obsProtocol: "rtmp",
-  obsServerUrl: "",
-  obsStreamKey: "",
-};
-
-function youtubeEmbed(value: string): string {
-  try {
-    const url = new URL(value);
-    if (url.hostname === "youtu.be") return `https://www.youtube-nocookie.com/embed/${url.pathname.slice(1)}`;
-    const id = url.searchParams.get("v");
-    if (id) return `https://www.youtube-nocookie.com/embed/${id}`;
-    return value;
-  } catch {
-    return value;
-  }
-}
+import {
+  createLiveSource,
+  listManagedVideoSources,
+  saveManagedVideoSource,
+  deleteManagedVideoSource,
+  revealCredentials,
+  rotateCredentials,
+  enableLiveSource,
+  disableLiveSource,
+  listLiveSourcesStatuses,
+  type ManagedVideoSource,
+} from "@/services/video-sources.service";
+import {
+  SourceGeneralForm,
+  ObsPublishingOptions,
+  StreamCredentialsPanel,
+  ConfiguredSourcesList,
+  type CreateButtonState,
+} from "@/components/admin/StreamAdminComponents";
+import { DeleteSourceDialog, RotateStreamKeyDialog } from "@/components/admin/StreamDialogs";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -73,237 +43,576 @@ function mergeSportsBundles(...bundles: SportsDataBundle[]): SportsDataBundle {
   const teams = new Map<string, SportsDataBundle["teams"][number]>();
   const competitions = new Map<string, SportsDataBundle["competitions"][number]>();
   for (const bundle of bundles) {
-    bundle.matches.forEach((match) => matches.set(match.id, match));
-    bundle.teams.forEach((team) => teams.set(team.id, team));
-    bundle.competitions.forEach((competition) => competitions.set(competition.id, competition));
+    bundle.matches.forEach((m) => matches.set(m.id, m));
+    bundle.teams.forEach((t) => teams.set(t.id, t));
+    bundle.competitions.forEach((c) => competitions.set(c.id, c));
   }
   return {
-    matches: [...matches.values()].sort((left, right) => left.startsAt.localeCompare(right.startsAt)),
+    matches: [...matches.values()].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
     teams: [...teams.values()],
     competitions: [...competitions.values()],
   };
 }
 
-function protocolFromIngestUrl(value: string): FormState["obsProtocol"] | undefined {
-  const protocol = value.match(/^([a-z0-9+.-]+):\/\//i)?.[1]?.toLowerCase();
-  return protocol === "rtmp" || protocol === "rtmps" || protocol === "srt" ? protocol : undefined;
+/** Validation errors for the create/edit form */
+interface FormErrors {
+  match?: string;
+  title?: string;
+  playbackUrl?: string;
 }
 
 const AdminPage = () => {
-  useDocumentMeta({ title: "Administración", description: "Gestiona fuentes de vídeo y configuración OBS por partido." });
+  useDocumentMeta({
+    title: "Administración de Emisión",
+    description: "Gestiona fuentes de vídeo y configuración OBS por partido.",
+  });
+
   const windowQuery = useSportsWindow();
   const liveQuery = useLiveSportsWindow();
   const [eventDate, setEventDate] = useState(todayKey);
   const dateQuery = useSportsDate(eventDate);
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<FormState>(emptyForm);
+
+  // ── Sources state ────────────────────────────────────────────────────────
   const [sources, setSources] = useState<ManagedVideoSource[]>([]);
   const [sourcesError, setSourcesError] = useState<string | null>(null);
-  const bundle = useMemo(() => mergeSportsBundles(windowQuery.bundle, dateQuery.bundle, liveQuery.bundle), [dateQuery.bundle, liveQuery.bundle, windowQuery.bundle]);
-  const isEventsLoading = (windowQuery.isLoading || dateQuery.isLoading || liveQuery.isLoading) && bundle.matches.length === 0;
-  const isEventsError = windowQuery.isError && dateQuery.isError && liveQuery.isError;
-  const teams = useMemo(() => new Map(bundle.teams.map((team) => [team.id, team])), [bundle.teams]);
-  const token = getSessionToken() ?? "";
-  const canAdmin = auth.profile?.role === "super_admin" || auth.profile?.role === "admin";
 
+  // ── Selection / Editing ───────────────────────────────────────────────────
+  const [selectedSource, setSelectedSource] = useState<ManagedVideoSource | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // ── Form state ────────────────────────────────────────────────────────────
+  const [formId, setFormId] = useState<string | undefined>(undefined);
+  const [matchId, setMatchId] = useState("");
+  const [title, setTitle] = useState("Transmisión Principal");
+  const [purpose, setPurpose] = useState<"live" | "highlight">("live");
+  const [format, setFormat] = useState<string>("hls");
+  const [playbackUrl, setPlaybackUrl] = useState("");
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  // ── OBS form state ────────────────────────────────────────────────────────
+  const [obsEnabled, setObsEnabled] = useState(false);
+  const [obsProtocol, setObsProtocol] = useState<"rtmp" | "rtmps" | "srt">("rtmps");
+  const [recordingEnabled, setRecordingEnabled] = useState(false);
+  const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
+
+  // ── Create button state (for progressive UI) ──────────────────────────────
+  const [createState, setCreateState] = useState<CreateButtonState>("idle");
+
+  // ── Credential state ──────────────────────────────────────────────────────
+  const [isRevealing, setIsRevealing] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+
+  // ── Dialog state ──────────────────────────────────────────────────────────
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isRotateDialogOpen, setIsRotateDialogOpen] = useState(false);
+  const [dialogSource, setDialogSource] = useState<ManagedVideoSource | null>(null);
+
+  /**
+   * Idempotency key per submit attempt — changes on every new create,
+   * stays the same during the same operation to prevent double-click duplicates.
+   */
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+
+  const bundle = useMemo(
+    () => mergeSportsBundles(windowQuery.bundle, dateQuery.bundle, liveQuery.bundle),
+    [dateQuery.bundle, liveQuery.bundle, windowQuery.bundle],
+  );
+  const isEventsLoading =
+    (windowQuery.isLoading || dateQuery.isLoading || liveQuery.isLoading) &&
+    bundle.matches.length === 0;
+  const isEventsError = windowQuery.isError && dateQuery.isError && liveQuery.isError;
+  const teams = useMemo(
+    () => new Map(bundle.teams.map((t) => [t.id, t])),
+    [bundle.teams],
+  );
+  const token = getSessionToken() ?? "";
+  const canAdmin =
+    auth.profile?.role === "super_admin" || auth.profile?.role === "admin";
+
+  // ── Load sources ──────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
     if (!token || !canAdmin) { setSources([]); return; }
     try {
-      setSources(await listManagedVideoSources(token));
+      const list = await listManagedVideoSources(token);
+      setSources(list);
       setSourcesError(null);
-    } catch (error) {
-      setSourcesError(error instanceof Error ? error.message : "No se pudieron cargar las fuentes");
+    } catch (err) {
+      setSourcesError(err instanceof Error ? err.message : "No se pudieron cargar las fuentes");
     }
   }, [token, canAdmin]);
 
   useEffect(() => { void loadSources(); }, [loadSources]);
 
-  const eventLabel = (matchId: string) => {
-    const match = bundle.matches.find((item) => item.id === matchId);
-    if (!match) return `Evento ${matchId}`;
-    return `${teams.get(match.homeTeamId)?.name ?? "Local"} vs ${teams.get(match.awayTeamId)?.name ?? "Visitante"}`;
+  // ── Polling for OBS status ────────────────────────────────────────────────
+  // sources.length (not sources) is intentional: we only restart the interval
+  // when the count changes, not on every status update, to avoid re-subscription loops.
+  useEffect(() => {
+    let active = true;
+    const interval = setInterval(async () => {
+      if (!active || document.visibilityState === "hidden" || !token || !canAdmin) return;
+      const obsSources = sources.filter((s) => s.sourceKind === "obs");
+      if (obsSources.length === 0) return;
+      try {
+        const statuses = await listLiveSourcesStatuses(token);
+        setSources((prev) =>
+          prev.map((s) => {
+            const found = statuses.find((item) => item.id === s.id);
+            return found ? { ...s, status: found.status } : s;
+          }),
+        );
+        setSelectedSource((curr) => {
+          if (!curr) return null;
+          const found = statuses.find((item) => item.id === curr.id);
+          return found ? { ...curr, status: found.status } : curr;
+        });
+      } catch {
+        // fail silently — polling errors shouldn't interrupt the admin
+      }
+    }, 5000);
+    return () => { active = false; clearInterval(interval); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sources.length is intentional; see comment above
+  }, [token, canAdmin, sources.length]);
+
+  const eventLabel = useCallback(
+    (id: string) => {
+      const match = bundle.matches.find((m) => m.id === id);
+      if (!match) return `Evento ${id}`;
+      return `${teams.get(match.homeTeamId)?.name ?? "Local"} vs ${teams.get(match.awayTeamId)?.name ?? "Visitante"}`;
+    },
+    [bundle.matches, teams],
+  );
+
+  // Default matchId when bundle updates
+  useEffect(() => {
+    if (bundle.matches.length > 0 && !matchId) {
+      setMatchId(bundle.matches[0].id);
+    }
+  }, [bundle.matches, matchId]);
+
+  // ── Form helpers ──────────────────────────────────────────────────────────
+  const resetForm = useCallback(() => {
+    setFormId(undefined);
+    setMatchId(bundle.matches[0]?.id || "");
+    setTitle("Transmisión Principal");
+    setPurpose("live");
+    setFormat("hls");
+    setPlaybackUrl("");
+    setObsEnabled(false);
+    setObsProtocol("rtmps");
+    setRecordingEnabled(false);
+    setLowLatencyEnabled(false);
+    setRevealedKey(null);
+    setIsEditing(false);
+    setFormErrors({});
+    setCreateState("idle");
+    // Rotate idempotency key for the next create operation
+    idempotencyKeyRef.current = crypto.randomUUID();
+  }, [bundle.matches]);
+
+  const handleEdit = (source: ManagedVideoSource) => {
+    setIsEditing(true);
+    setFormId(source.id);
+    setMatchId(source.matchId);
+    setTitle(source.title);
+    setPurpose(source.usageType === "highlight" ? "highlight" : "live");
+    setFormat(source.sourceKind === "obs" ? "hls" : source.type);
+    setPlaybackUrl(source.playbackUrl || source.url || source.embedUrl || "");
+    setObsEnabled(source.sourceKind === "obs");
+    setObsProtocol(source.ingestProtocol || "rtmps");
+    setRecordingEnabled(source.recordingEnabled === true);
+    setLowLatencyEnabled(source.lowLatencyEnabled === true);
+    setRevealedKey(null);
+    setFormErrors({});
+    setCreateState("idle");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
+  /** Validates the form; returns true if valid, sets formErrors otherwise. */
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+    if (!matchId) errors.match = "Selecciona un partido.";
+    if (!title.trim()) errors.title = "Introduce un nombre para la señal.";
+    if (title.trim().length > 100) errors.title = "El nombre no puede superar los 100 caracteres.";
+    if (!obsEnabled && !playbackUrl.trim()) {
+      errors.playbackUrl = "Introduce la URL de reproducción.";
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
-  function reset() {
-    setForm({ ...emptyForm, matchId: bundle.matches[0]?.id ?? "" });
-  }
+  // ── Main save handler ─────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (createState !== "idle" && createState !== "done") return; // guard double-click
+    if (!validateForm()) return;
+
+    if (isEditing && formId) {
+      // ── Edit existing source ───────────────────────────────────────────
+      setCreateState("saving");
+      const patch: Partial<ManagedVideoSource> = {
+        matchId,
+        title: title.trim(),
+        usageType: obsEnabled ? "live" : purpose,
+      };
+      if (!obsEnabled) {
+        patch.playbackUrl = playbackUrl.trim();
+        patch.url = playbackUrl.trim();
+      }
+      try {
+        const updatedList = await saveManagedVideoSource({ id: formId, ...patch }, token, true);
+        setSources(updatedList);
+        await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
+        toast.success("Fuente actualizada correctamente");
+        resetForm();
+      } catch (err) {
+        setCreateState("idle");
+        toast.error(err instanceof Error ? err.message : "Error al guardar la fuente");
+      }
+      return;
+    }
+
+    // ── Create new source ──────────────────────────────────────────────────
+    // Lock: same idempotency key used while this operation runs
+    const currentIdempotencyKey = idempotencyKeyRef.current;
+
+    if (obsEnabled) {
+      setCreateState("provisioning");
+    } else {
+      setCreateState("saving");
+    }
+
+    try {
+      const created = await createLiveSource(
+        {
+          matchId,
+          title: title.trim(),
+          sourceKind: obsEnabled ? "obs" : "manual",
+          usageType: obsEnabled ? "live" : purpose,
+          playbackFormat: obsEnabled ? "hls" : format,
+          playbackUrl: obsEnabled ? undefined : playbackUrl.trim(),
+          ingestProtocol: obsEnabled ? obsProtocol : undefined,
+          recordingEnabled: obsEnabled ? recordingEnabled : undefined,
+          lowLatencyEnabled: obsEnabled ? lowLatencyEnabled : undefined,
+          idempotencyKey: currentIdempotencyKey,
+        },
+        token,
+      );
+
+      if (obsEnabled) {
+        setCreateState("saving");
+        // Small delay to show the "saving" state
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
+      setCreateState("done");
+
+      // Reload list
+      const updatedList = await listManagedVideoSources(token);
+      setSources(updatedList);
+
+      // Select newly created source and show credentials immediately
+      const freshSource = updatedList.find((s) => s.id === created.id) ?? created;
+      setSelectedSource(freshSource);
+
+      // The POST response returns the stream key in plain text — display it immediately
+      if (created.obs?.streamKey) {
+        setRevealedKey(created.obs.streamKey as string);
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
+      toast.success(
+        obsEnabled
+          ? "Fuente OBS creada. Copia el servidor y la clave en OBS Studio."
+          : "Fuente de transmisión creada correctamente.",
+      );
+
+      // Reset form after brief "done" display
+      setTimeout(() => resetForm(), 1500);
+    } catch (err) {
+      setCreateState("idle");
+      // Rotate idempotency key so the admin can retry cleanly
+      idempotencyKeyRef.current = crypto.randomUUID();
+      toast.error(err instanceof Error ? err.message : "Error al crear la fuente");
+    }
+  };
+
+  // ── Delete handlers ───────────────────────────────────────────────────────
+  const handleDeleteTrigger = (source: ManagedVideoSource) => {
+    setDialogSource(source);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!dialogSource) return;
+    try {
+      const updatedList = await deleteManagedVideoSource(dialogSource.id, token);
+      setSources(updatedList);
+      if (selectedSource?.id === dialogSource.id) setSelectedSource(null);
+      await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
+      toast.success("Fuente eliminada correctamente");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo eliminar la fuente");
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDialogSource(null);
+    }
+  };
+
+  // ── Rotate handlers ───────────────────────────────────────────────────────
+  const handleRotateTrigger = (source: ManagedVideoSource) => {
+    setDialogSource(source);
+    setIsRotateDialogOpen(true);
+  };
+
+  const handleRotateConfirm = async () => {
+    if (!dialogSource) return;
+    setIsRotating(true);
+    try {
+      const result = await rotateCredentials(dialogSource.id, token);
+      setRevealedKey(result.streamKey);
+      toast.success("Clave de transmisión rotada. Configura la nueva clave en OBS.");
+      await loadSources();
+      setSelectedSource((curr) =>
+        curr
+          ? { ...curr, streamKeyLast4: result.streamKey.slice(-4), ingestUrl: result.ingestUrl }
+          : null,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al rotar credenciales");
+    } finally {
+      setIsRotating(false);
+      setIsRotateDialogOpen(false);
+      setDialogSource(null);
+    }
+  };
+
+  // ── Reveal credentials ────────────────────────────────────────────────────
+  const handleReveal = async () => {
+    if (!selectedSource) return;
+    setIsRevealing(true);
+    try {
+      const result = await revealCredentials(selectedSource.id, token);
+      setRevealedKey(result.streamKey);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al revelar la clave");
+    } finally {
+      setIsRevealing(false);
+    }
+  };
+
+  // ── Toggle enable/disable ─────────────────────────────────────────────────
+  const handleToggleEnabled = async (source: ManagedVideoSource) => {
+    const isCurrentlyEnabled = source.isEnabled !== false;
+    try {
+      if (isCurrentlyEnabled) {
+        await disableLiveSource(source.id, token);
+        toast.info("Señal desactivada");
+      } else {
+        await enableLiveSource(source.id, token);
+        toast.success("Señal activada");
+      }
+      await loadSources();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al cambiar estado");
+    }
+  };
+
+  // ── Set primary ───────────────────────────────────────────────────────────
+  const handleSetPrimary = async (source: ManagedVideoSource) => {
+    try {
+      await saveManagedVideoSource({ id: source.id, isPrimary: true }, token, true);
+      toast.success("Fuente marcada como principal para el partido");
+      await loadSources();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al marcar principal");
+    }
+  };
 
   async function refreshEvents() {
     await Promise.all([windowQuery.refetch(), dateQuery.refetch(), liveQuery.refetch()]);
+    toast.success("Listado de partidos actualizado");
   }
 
-  function edit(source: ManagedVideoSource) {
-    setForm({
-      id: source.id,
-      matchId: source.matchId,
-      title: source.title,
-      purpose: source.purpose ?? "live",
-      type: source.type,
-      playbackUrl: source.url ?? source.embedUrl ?? "",
-      obsEnabled: Boolean(source.obs),
-      obsProtocol: source.obs?.protocol ?? "rtmp",
-      obsServerUrl: source.obs?.serverUrl ?? "",
-      obsStreamKey: source.obs?.streamKey ?? "",
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function save() {
-    const matchId = form.matchId || bundle.matches[0]?.id;
-    const embed = ["youtube", "youtube_live", "embed", "iframe"].includes(form.type);
-    const source = {
-      id: form.id ?? crypto.randomUUID(),
-      type: form.type,
-      title: form.title.trim(),
-      isExternal: embed,
-      purpose: form.purpose,
-      provider: form.type === "youtube" || form.type === "youtube_live" ? "youtube" as const : "custom" as const,
-      requiresConsent: embed,
-      ...(embed ? { embedUrl: form.type === "youtube" || form.type === "youtube_live" ? youtubeEmbed(form.playbackUrl) : form.playbackUrl } : { url: form.playbackUrl }),
-    };
-    const parsed = streamSourceSchema.safeParse(source);
-    if (!matchId) return toast.error("Selecciona un partido");
-    if (!token || !canAdmin) return toast.error("Tu cuenta no tiene permisos administrativos");
-    if (!parsed.success) return toast.error(parsed.error.issues[0]?.message ?? "Fuente inválida");
-    const ingestProtocol = protocolFromIngestUrl(form.obsServerUrl);
-    if (form.obsEnabled && !ingestProtocol) {
-      return toast.error("La dirección de ingestión debe comenzar por rtmp://, rtmps:// o srt://");
+  // ── OBS toggle: force "live" usage and clear playbackUrl field ────────────
+  const handleObsEnabledChange = (val: boolean) => {
+    setObsEnabled(val);
+    if (val) {
+      setPurpose("live");
+      setFormat("hls");
+      setPlaybackUrl("");
+      setFormErrors((prev) => ({ ...prev, playbackUrl: undefined }));
     }
-    if (form.obsEnabled && ingestProtocol !== form.obsProtocol) {
-      return toast.error("El protocolo OBS debe coincidir con la URL de ingestión");
-    }
-    try {
-      const updated = await saveManagedVideoSource({
-        ...source,
-        matchId,
-        createdAt: new Date().toISOString(),
-        purpose: form.purpose,
-        obs: form.obsEnabled ? { protocol: form.obsProtocol, serverUrl: form.obsServerUrl, streamKey: form.obsStreamKey || undefined } : undefined,
-      }, token);
-      setSources(updated);
-      await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
-      toast.success(form.id ? "Fuente actualizada" : "Fuente creada");
-      reset();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo guardar la fuente");
-    }
-  }
+  };
 
-  async function remove(id: string) {
-    if (!token || !canAdmin) return toast.error("Tu cuenta no tiene permisos administrativos");
-    try {
-      setSources(await deleteManagedVideoSource(id, token));
-      await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
-      toast.success("Fuente eliminada");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo eliminar la fuente");
-    }
-  }
-
-  async function copy(value: string, label: string) {
-    await navigator.clipboard.writeText(value);
-    toast.success(`${label} copiada`);
-  }
-
+  // ── Loading / access guard ────────────────────────────────────────────────
   if (auth.isLoading) {
-    return <section className="container mx-auto space-y-4 px-4 py-8 md:px-6"><SkeletonLoader className="h-32 w-full" /><SkeletonLoader className="h-96 w-full" /></section>;
-  }
-  if (!auth.authenticated) {
-    return <section className="container mx-auto px-4 py-12 md:px-6"><ErrorState title="Inicia sesión" description="Debes autenticarte para acceder al panel administrativo." /></section>;
-  }
-  if (!canAdmin) {
-    return <section className="container mx-auto px-4 py-12 md:px-6"><ErrorState title="Acceso restringido" description="Tu cuenta no tiene un rol administrativo." /></section>;
+    return (
+      <section className="space-y-4 py-8">
+        <SkeletonLoader className="h-10 w-64" />
+        <SkeletonLoader className="h-48 w-full" />
+        <SkeletonLoader className="h-96 w-full" />
+      </section>
+    );
   }
 
+  if (!auth.authenticated || !canAdmin) {
+    return (
+      <section className="py-12">
+        <ErrorState
+          title={!auth.authenticated ? "Inicia sesión" : "Acceso restringido"}
+          description={
+            !auth.authenticated
+              ? "Debes autenticarte para acceder al panel de administración."
+              : "Tu cuenta no tiene privilegios administrativos."
+          }
+        />
+      </section>
+    );
+  }
+
+  const isBusy = createState === "provisioning" || createState === "saving";
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <section className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      {/* Header */}
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border/40 pb-4">
         <div>
-          <p className="text-xs uppercase tracking-wider text-primary">Control de emisión</p>
-          <h1 className="font-display text-3xl font-bold">Fuentes de vídeo</h1>
-          <p className="text-sm text-muted-foreground">Asocia transmisiones y highlights de strVideo con eventos de TheSportsDB.</p>
+          <p className="text-xs uppercase tracking-wider text-primary font-semibold">
+            Panel de control
+          </p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Fuentes de transmisión</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Asocia señales en vivo, emisiones OBS y vídeos a partidos deportivos.
+          </p>
         </div>
-        <Button variant="outline" onClick={() => void refreshEvents()}>Actualizar eventos</Button>
+        <Button
+          variant="outline"
+          className="border-border/60 hover:bg-surface-2 gap-1.5"
+          onClick={() => void refreshEvents()}
+          aria-label="Actualizar lista de partidos"
+        >
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          Actualizar partidos
+        </Button>
       </header>
 
-      {sourcesError ? <Alert variant="destructive"><AlertTitle>No se pudo cargar el panel</AlertTitle><AlertDescription>{sourcesError}</AlertDescription></Alert> : null}
+      {/* Error banner */}
+      {sourcesError && (
+        <Alert variant="destructive" role="alert">
+          <AlertTitle>Error al cargar fuentes</AlertTitle>
+          <AlertDescription>{sourcesError}</AlertDescription>
+        </Alert>
+      )}
 
+      {/* Brand settings panel */}
       <BrandSettingsPanel token={token} />
 
-      <Alert className="border-warning/30 bg-warning/5">
-        <RadioTower className="h-4 w-4" />
-        <AlertTitle>OBS publica; el navegador reproduce</AlertTitle>
-        <AlertDescription>Configura en OBS la dirección RTMP/RTMPS/SRT y su clave. Añade también la salida HTTPS HLS o MP4 entregada por MediaMTX, Mux o Cloudflare Stream. Las credenciales se guardan en backend y no se incluyen en la respuesta pública.</AlertDescription>
-      </Alert>
+      {/* ── 3-Column grid ── */}
+      <div
+        className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
+        aria-label="Configuración de nueva fuente"
+      >
+        {/* Col 1 — Información general */}
+        <SourceGeneralForm
+          eventDate={eventDate}
+          onEventDateChange={setEventDate}
+          matches={bundle.matches}
+          selectedMatchId={matchId}
+          onMatchChange={setMatchId}
+          title={title}
+          onTitleChange={setTitle}
+          titleError={formErrors.title}
+          matchError={formErrors.match}
+          playbackUrlError={formErrors.playbackUrl}
+          purpose={purpose}
+          onPurposeChange={setPurpose}
+          format={format}
+          onFormatChange={setFormat}
+          playbackUrl={playbackUrl}
+          onPlaybackUrlChange={setPlaybackUrl}
+          isObsEnabled={obsEnabled}
+          isEventsLoading={isEventsLoading}
+          isEventsError={isEventsError}
+          eventLabel={eventLabel}
+          isEditing={isEditing}
+          onCancelEdit={resetForm}
+          onSave={handleSave}
+          createState={createState}
+        />
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <Card className="surface-card h-fit">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 font-display"><Plus className="h-5 w-5 text-primary" />{form.id ? "Editar fuente" : "Nueva fuente"}</CardTitle>
-            <CardDescription>La fuente quedará disponible inmediatamente en el reproductor del partido.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-              <Field label="Fecha">
-                <Input type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value || todayKey())} />
-              </Field>
-              {isEventsLoading ? <div className="space-y-1.5"><Label>Partido</Label><SkeletonLoader className="h-10 w-full" /></div> : isEventsError ? <ErrorState title="No se pudieron cargar los eventos" description="Comprueba la conexion con la API deportiva." /> : (
-                <Field label="Partido">
-                  <Select value={form.matchId || bundle.matches[0]?.id} onValueChange={(value) => update("matchId", value)}>
-                    <SelectTrigger><SelectValue placeholder="Selecciona un evento de la API" /></SelectTrigger>
-                    <SelectContent>{bundle.matches.map((match) => <SelectItem key={match.id} value={match.id}>{eventLabel(match.id)}</SelectItem>)}</SelectContent>
-                  </Select>
-                </Field>
-              )}
-            </div>
-            <Field label="Nombre"><Input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="Señal principal HD" /></Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Uso">
-                <Select value={form.purpose} onValueChange={(value) => update("purpose", value as FormState["purpose"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="live">En vivo</SelectItem><SelectItem value="highlight">Highlight</SelectItem></SelectContent></Select>
-              </Field>
-              <Field label="Formato">
-                <Select value={form.type} onValueChange={(value) => update("type", value as FormState["type"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="hls">HLS (.m3u8)</SelectItem><SelectItem value="obs_hls">OBS a HLS</SelectItem><SelectItem value="mp4">MP4</SelectItem><SelectItem value="mp3">MP3</SelectItem><SelectItem value="youtube">YouTube</SelectItem><SelectItem value="youtube_live">YouTube Live</SelectItem><SelectItem value="embed">URL embed</SelectItem><SelectItem value="iframe">Iframe autorizado</SelectItem></SelectContent></Select>
-              </Field>
-            </div>
-            <Field label="URL de reproducción"><Input type="url" value={form.playbackUrl} onChange={(event) => update("playbackUrl", event.target.value)} placeholder="https://cdn.example.com/live/index.m3u8" /></Field>
+        {/* Col 2 — Opciones OBS */}
+        <ObsPublishingOptions
+          obsEnabled={obsEnabled}
+          onObsEnabledChange={handleObsEnabledChange}
+          obsProtocol={obsProtocol}
+          onObsProtocolChange={setObsProtocol}
+          recordingEnabled={recordingEnabled}
+          onRecordingEnabledChange={setRecordingEnabled}
+          lowLatencyEnabled={lowLatencyEnabled}
+          onLowLatencyEnabledChange={setLowLatencyEnabled}
+        />
 
-            <div className="rounded-lg border border-border bg-surface-2/40 p-4">
-              <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">Publicar con OBS</p><p className="text-xs text-muted-foreground">Añade datos de ingestión para el operador.</p></div><Switch checked={form.obsEnabled} onCheckedChange={(value) => update("obsEnabled", value)} /></div>
-              {form.obsEnabled ? <div className="mt-4 space-y-3">
-                <Field label="Protocolo"><Select value={form.obsProtocol} onValueChange={(value) => update("obsProtocol", value as FormState["obsProtocol"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="rtmp">RTMP</SelectItem><SelectItem value="rtmps">RTMPS</SelectItem><SelectItem value="srt">SRT</SelectItem></SelectContent></Select></Field>
-                <Field label="Servidor de ingestión"><Input value={form.obsServerUrl} onChange={(event) => update("obsServerUrl", event.target.value)} placeholder="rtmps://ingest.example.com/live" /></Field>
-                <Field label="Clave de transmisión"><Input type="password" value={form.obsStreamKey} onChange={(event) => update("obsStreamKey", event.target.value)} placeholder={form.id ? "Dejar vacío para conservar la clave guardada" : "••••••••••••"} /></Field>
-              </div> : null}
-            </div>
-            <div className="flex gap-2"><Button className="flex-1" onClick={save}>{form.id ? "Guardar cambios" : "Crear fuente"}</Button>{form.id ? <Button variant="ghost" onClick={reset}>Cancelar</Button> : null}</div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Fuentes configuradas</h2><Badge variant="secondary">{sources.length}</Badge></div>
-          {sources.length === 0 ? <EmptyState title="Aún no hay fuentes" description="Crea una fuente y quedará asociada al evento seleccionado." /> : sources.map((source) => (
-            <Card key={source.id} className="surface-card">
-              <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Video className="h-5 w-5" /></span>
-                <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-display font-semibold">{source.title}</p><Badge variant="outline">{source.type.toUpperCase()}</Badge><Badge variant="secondary">{source.purpose === "highlight" ? "Highlight" : "En vivo"}</Badge>{source.obs ? <Badge className="bg-success/15 text-success hover:bg-success/20">OBS</Badge> : null}</div><p className="truncate text-sm text-muted-foreground">{eventLabel(source.matchId)}</p><p className="mt-1 truncate font-mono text-xs text-muted-foreground">{source.url ?? source.embedUrl}</p></div>
-                {source.obs ? <div className="flex items-center gap-1"><Button size="icon" variant="ghost" aria-label="Copiar servidor OBS" onClick={() => copy(source.obs!.serverUrl, "Dirección OBS")}><Copy className="h-4 w-4" /></Button>{source.obs.hasStreamKey ? <Badge variant="outline">Clave guardada</Badge> : null}</div> : null}
-                <div className="flex gap-1"><Button size="icon" variant="ghost" aria-label="Editar fuente" onClick={() => edit(source)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-destructive" aria-label="Eliminar fuente" onClick={() => remove(source.id)}><Trash2 className="h-4 w-4" /></Button></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* Col 3 — Credenciales */}
+        <StreamCredentialsPanel
+          source={selectedSource}
+          onReveal={handleReveal}
+          onRotate={() => selectedSource && handleRotateTrigger(selectedSource)}
+          revealedKey={revealedKey}
+          isRevealing={isRevealing}
+          isRotating={isRotating}
+          isProvisioning={
+            isBusy && obsEnabled && !selectedSource
+              ? false
+              : selectedSource?.status === "provisioning"
+          }
+        />
       </div>
+
+      {/* ── Fuentes configuradas (ancho completo) ── */}
+      <div className="space-y-4 border-t border-border/40 pt-6">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-xl font-bold">Fuentes configuradas</h2>
+          <Badge variant="secondary" className="px-2 py-0.5 tabular-nums">
+            {sources.length}
+          </Badge>
+        </div>
+
+        <ConfiguredSourcesList
+          sources={sources}
+          eventLabel={eventLabel}
+          onEdit={handleEdit}
+          onDelete={handleDeleteTrigger}
+          onRotate={handleRotateTrigger}
+          onToggleEnabled={handleToggleEnabled}
+          onSetPrimary={handleSetPrimary}
+          selectedSourceId={selectedSource?.id}
+          onSelect={(src) => {
+            setSelectedSource(src);
+            setRevealedKey(null);
+          }}
+        />
+      </div>
+
+      {/* Dialogs */}
+      <DeleteSourceDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        sourceName={dialogSource?.title || ""}
+        isLive={dialogSource?.status === "live"}
+      />
+      <RotateStreamKeyDialog
+        isOpen={isRotateDialogOpen}
+        onClose={() => setIsRotateDialogOpen(false)}
+        onConfirm={handleRotateConfirm}
+        sourceName={dialogSource?.title || ""}
+        isLive={dialogSource?.status === "live"}
+      />
     </section>
   );
 };
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>;
-}
 
 export default AdminPage;

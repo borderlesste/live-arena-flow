@@ -25,7 +25,7 @@ const liveScoreSchema = rawEventSchema.extend({
 const liveScoreResponseSchema = z.object({ livescore: z.array(liveScoreSchema).nullish(), events: z.array(liveScoreSchema).nullish() }).passthrough();
 type RawEvent = z.infer<typeof rawEventSchema>;
 type RawLiveScore = z.infer<typeof liveScoreSchema>;
-const SUPPORTED_SPORTS = ["Soccer", "Basketball", "Baseball", "Volleyball"] as const;
+const SUPPORTED_SPORTS = ["Soccer"] as const;
 const LIVE_STATUS_CODES = [
   "1H", "2H", "ET", "LIVE", "IN PLAY", "IN PROGRESS", "Q1", "Q2", "Q3", "Q4", "OT", "BT", "P", "PT",
   "IN1", "IN2", "IN3", "IN4", "IN5", "IN6", "IN7", "IN8", "IN9", "P1", "P2", "P3", "S1", "S2", "S3", "S4", "S5",

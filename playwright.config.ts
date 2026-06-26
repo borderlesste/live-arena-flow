@@ -23,7 +23,11 @@ export default defineConfig({
       command: "npx.cmd next dev -p 18080",
       port: 18080,
       reuseExistingServer: false,
-      env: { API_INTERNAL_URL: "http://127.0.0.1:18787" },
+      env: {
+        API_INTERNAL_URL: "http://127.0.0.1:18787",
+        NEXT_PUBLIC_SUPABASE_URL: "",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
+      },
     },
   ],
 });

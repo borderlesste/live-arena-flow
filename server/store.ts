@@ -13,11 +13,33 @@ export interface StoredVideoSource {
   url?: string;
   embedUrl?: string;
   title: string;
-  isExternal: boolean;
+  isExternal?: boolean;
   requiresConsent?: boolean;
-  provider?: "youtube" | "tiktok" | "vimeo" | "custom";
+  /** Streaming provider — "custom" for RTMP, or any string identifier for external providers. */
+  provider?: "youtube" | "tiktok" | "vimeo" | "custom" | (string & {});
   purpose?: "live" | "highlight";
-  obs?: { protocol: "rtmp" | "srt"; serverUrl: string; streamKey?: string };
+  obs?: { protocol: "rtmp" | "rtmps" | "srt"; serverUrl: string; streamKey?: string };
+  // New fields for modular live sources architecture:
+  sourceKind?: "manual" | "obs";
+  usageType?: "live" | "highlight" | "prerecorded";
+  playbackFormat?: string;
+  playbackUrl?: string;
+  providerInputId?: string;
+  ingestProtocol?: "rtmp" | "rtmps" | "srt";
+  ingestUrl?: string;
+  streamKeyCiphertext?: string;
+  streamKeyIv?: string;
+  streamKeyLast4?: string;
+  credentialsVersion?: number;
+  status?: "provisioning" | "ready" | "connecting" | "live" | "disconnected" | "disabled" | "error";
+  statusMessage?: string;
+  isEnabled?: boolean;
+  isPrimary?: boolean;
+  recordingEnabled?: boolean;
+  lowLatencyEnabled?: boolean;
+  lastConnectedAt?: string;
+  lastDisconnectedAt?: string;
+  updatedAt?: string;
 }
 
 export interface UserPreferences {

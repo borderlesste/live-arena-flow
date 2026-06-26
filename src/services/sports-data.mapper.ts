@@ -17,13 +17,11 @@ function monogram(value: string): string {
 
 function shortName(value: string): string { return value.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 3).toUpperCase() || "TBD"; }
 
-function mapSport(value: string): Sport {
+/** Returns "football" for soccer/football events, null for everything else (discarded). */
+function mapSport(value: string): Sport | null {
   switch (value.toLowerCase()) {
     case "soccer": case "football": return "football";
-    case "basketball": return "basketball";
-    case "baseball": return "baseball";
-    case "volleyball": return "volleyball";
-    default: return "other";
+    default: return null;
   }
 }
 
@@ -39,29 +37,47 @@ function youtubeEmbed(value: string): string {
 export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: ManagedVideoSource[] = []): SportsDataBundle {
   const teams = new Map<string, Team>();
   const competitions = new Map<string, Competition>();
-  const matches = events.map((event): Match => {
-    const sport = mapSport(event.sport);
-    teams.set(event.homeTeam.id, { id: event.homeTeam.id, name: event.homeTeam.name, shortName: shortName(event.homeTeam.name), monogram: monogram(event.homeTeam.name), color: colorFor(event.homeTeam.id), badgeUrl: event.homeTeam.badgeUrl });
-    teams.set(event.awayTeam.id, { id: event.awayTeam.id, name: event.awayTeam.name, shortName: shortName(event.awayTeam.name), monogram: monogram(event.awayTeam.name), color: colorFor(event.awayTeam.id), badgeUrl: event.awayTeam.badgeUrl });
-    const existing = competitions.get(event.competition.id);
-    competitions.set(event.competition.id, {
-      id: event.competition.id, name: event.competition.name, region: event.competition.region ?? "Internacional", sport,
-      monogram: monogram(event.competition.name), color: colorFor(event.competition.id), badgeUrl: event.competition.badgeUrl,
-      activeMatches: (existing?.activeMatches ?? 0) + (event.status === "live" ? 1 : 0),
-      nextEventAt: existing?.nextEventAt && existing.nextEventAt < event.startsAt ? existing.nextEventAt : event.startsAt,
-    });
-    const managedSources = videoSources.filter((source) => source.matchId === event.id);
-    const apiHighlight = event.highlightUrl ? [{ id: `provider-video-${event.id}`, type: "youtube" as const, embedUrl: youtubeEmbed(event.highlightUrl), title: "Highlight oficial", isExternal: true, requiresConsent: true, provider: "youtube" as const, purpose: "highlight" as const }] : [];
-    const highlights = [...apiHighlight, ...managedSources.filter((source) => source.purpose === "highlight")];
-    return {
-      id: event.id, sport, competitionId: event.competition.id, homeTeamId: event.homeTeam.id, awayTeamId: event.awayTeam.id,
-      homeScore: event.homeScore, awayScore: event.awayScore, status: event.status,
-      clock: event.status === "live" ? event.statusLabel ?? "En vivo" : undefined,
-      startsAt: event.startsAt, venue: event.venue ?? event.city ?? "Sede por confirmar",
-      streams: managedSources.filter((source) => source.purpose !== "highlight"), highlights,
-      hasReplay: managedSources.some((source) => source.purpose === "highlight"), hasSummary: highlights.length > 0,
-    };
-  });
+
+  const matches = events
+    .map((event): Match | null => {
+      const sport = mapSport(event.sport);
+      if (!sport) return null; // discard non-football events
+
+      teams.set(event.homeTeam.id, {
+        id: event.homeTeam.id, name: event.homeTeam.name, shortName: shortName(event.homeTeam.name),
+        monogram: monogram(event.homeTeam.name), color: colorFor(event.homeTeam.id), badgeUrl: event.homeTeam.badgeUrl,
+      });
+      teams.set(event.awayTeam.id, {
+        id: event.awayTeam.id, name: event.awayTeam.name, shortName: shortName(event.awayTeam.name),
+        monogram: monogram(event.awayTeam.name), color: colorFor(event.awayTeam.id), badgeUrl: event.awayTeam.badgeUrl,
+      });
+
+      const existing = competitions.get(event.competition.id);
+      competitions.set(event.competition.id, {
+        id: event.competition.id, name: event.competition.name, region: event.competition.region ?? "Internacional", sport,
+        monogram: monogram(event.competition.name), color: colorFor(event.competition.id), badgeUrl: event.competition.badgeUrl,
+        activeMatches: (existing?.activeMatches ?? 0) + (event.status === "live" ? 1 : 0),
+        nextEventAt: existing?.nextEventAt && existing.nextEventAt < event.startsAt ? existing.nextEventAt : event.startsAt,
+      });
+
+      const managedSources = videoSources.filter((source) => source.matchId === event.id);
+      const apiHighlight = event.highlightUrl
+        ? [{ id: `provider-video-${event.id}`, type: "youtube" as const, embedUrl: youtubeEmbed(event.highlightUrl), title: "Highlight oficial", isExternal: true, requiresConsent: true, provider: "youtube" as const, purpose: "highlight" as const }]
+        : [];
+      const highlights = [...apiHighlight, ...managedSources.filter((source) => source.purpose === "highlight")];
+
+      return {
+        id: event.id, sport, competitionId: event.competition.id,
+        homeTeamId: event.homeTeam.id, awayTeamId: event.awayTeam.id,
+        homeScore: event.homeScore, awayScore: event.awayScore, status: event.status,
+        clock: event.status === "live" ? event.statusLabel ?? "En vivo" : undefined,
+        startsAt: event.startsAt, venue: event.venue ?? event.city ?? "Sede por confirmar",
+        streams: managedSources.filter((source) => source.purpose !== "highlight"), highlights,
+        hasReplay: managedSources.some((source) => source.purpose === "highlight"),
+        hasSummary: highlights.length > 0,
+      };
+    })
+    .filter((m): m is Match => m !== null);
+
   return { matches, teams: [...teams.values()], competitions: [...competitions.values()] };
 }
-

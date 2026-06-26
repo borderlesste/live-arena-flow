@@ -13,8 +13,12 @@ const playableUrl = z
   .string()
   .url()
   .refine((u) => {
-    const url = new URL(u);
-    return url.protocol === "https:" || (["localhost", "127.0.0.1"].includes(url.hostname) && url.protocol === "http:");
+    try {
+      const url = new URL(u);
+      return url.protocol === "https:" || ((["localhost", "127.0.0.1"].includes(url.hostname) && url.protocol === "http:"));
+    } catch {
+      return false;
+    }
   }, { message: "Usa HTTPS o HTTP únicamente para servidores locales" });
 
 export const embedUrlSchema = playableUrl.refine(
@@ -43,13 +47,22 @@ export const streamSourceSchema = z
     provider: z.enum(["youtube", "tiktok", "vimeo", "custom"]).optional(),
   })
   .superRefine((src, ctx) => {
-    if (["hls", "obs_hls", "mp4", "mp3"].includes(src.type)) {
+    if (["hls", "mp4", "mp3"].includes(src.type)) {
       const parsed = mediaUrlSchema.safeParse(src.url);
       if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error.issues[0]?.message ?? "URL inválida", path: ["url"] });
-    } else {
-      const parsed = embedUrlSchema.safeParse(src.embedUrl);
-      if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error.issues[0]?.message ?? "URL inválida", path: ["embedUrl"] });
+      return;
     }
+
+    if (src.type === "obs_hls") {
+      if (src.url) {
+        const parsed = mediaUrlSchema.safeParse(src.url);
+        if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error.issues[0]?.message ?? "URL inválida", path: ["url"] });
+      }
+      return;
+    }
+
+    const parsed = embedUrlSchema.safeParse(src.embedUrl);
+    if (!parsed.success) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error.issues[0]?.message ?? "URL inválida", path: ["embedUrl"] });
   });
 
 export type StreamSourceInput = z.infer<typeof streamSourceSchema>;
