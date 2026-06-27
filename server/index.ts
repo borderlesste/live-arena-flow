@@ -40,6 +40,20 @@ if (process.env.NODE_ENV === "production" && (!(process.env.SUPABASE_URL || proc
   throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required in production");
 }
 
+// Validate Cloudflare Stream config when that provider is selected
+if ((process.env.STREAM_PROVIDER || "custom").toLowerCase() === "cloudflare") {
+  if (!process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) {
+    throw new Error("[startup] CLOUDFLARE_ACCOUNT_ID is required when STREAM_PROVIDER=cloudflare");
+  }
+  const cfToken = process.env.CLOUDFLARE_STREAM_API_TOKEN?.trim() || process.env.CLOUDFLARE_API_TOKEN?.trim();
+  if (!cfToken) {
+    throw new Error("[startup] CLOUDFLARE_STREAM_API_TOKEN is required when STREAM_PROVIDER=cloudflare");
+  }
+  if (!process.env.CLOUDFLARE_STREAM_CUSTOMER_CODE?.trim()) {
+    console.warn("[startup] CLOUDFLARE_STREAM_CUSTOMER_CODE is not set — HLS playback URLs cannot be generated until it is configured.");
+  }
+}
+
 function protectSecret(value: string): string {
   if (!STREAM_SECRET_KEY) return value;
   const key = createHash("sha256").update(STREAM_SECRET_KEY).digest();
@@ -951,15 +965,33 @@ const server = createServer(async (request, response) => {
       if (!currentSource) return json(response, 404, { error: "Fuente no encontrada" });
       if (currentSource.sourceKind !== "obs") return json(response, 400, { error: "Solo fuentes OBS" });
 
-      const ciphertext = currentSource.streamKeyCiphertext || currentSource.obs?.streamKey || "";
-      if (!ciphertext) return json(response, 404, { error: "Clave no encontrada" });
+      let streamKey: string;
+      let ingestUrl: string = currentSource.ingestUrl || "";
+      let ingestProtocol: "rtmp" | "rtmps" | "srt" = (currentSource.ingestProtocol as "rtmps") || "rtmps";
 
-      const streamKey = decryptSecret(ciphertext);
+      // For Cloudflare provider: fetch credentials from Cloudflare API (preferred — no local plaintext storage)
+      const provider = getLiveStreamProvider();
+      if (currentSource.provider === "cloudflare_stream" && currentSource.providerInputId && "getCredentials" in provider) {
+        try {
+          const creds = await (provider as import("./modules/streaming/cloudflare.provider.js").CloudflareStreamProvider).getCredentials(currentSource.providerInputId);
+          streamKey = creds.streamKey;
+          ingestUrl = creds.ingestUrl;
+          ingestProtocol = creds.ingestProtocol;
+        } catch {
+          return json(response, 502, { error: { code: "CLOUDFLARE_CREDENTIALS_FETCH_FAILED", message: "No se pudieron obtener las credenciales del proveedor." } });
+        }
+      } else {
+        // Custom RTMP / legacy: decrypt from local storage
+        const ciphertext = currentSource.streamKeyCiphertext || currentSource.obs?.streamKey || "";
+        if (!ciphertext) return json(response, 404, { error: "Clave no encontrada" });
+        streamKey = decryptSecret(ciphertext);
+      }
+
       await logAudit(request, "reveal_credentials", id, "success");
 
       return json(response, 200, {
-        ingestUrl: currentSource.ingestUrl,
-        ingestProtocol: currentSource.ingestProtocol,
+        ingestUrl,
+        ingestProtocol,
         streamKey,
       });
     }
@@ -1570,6 +1602,113 @@ const server = createServer(async (request, response) => {
       console.log("Received contact message");
       return json(response, 201, { ok: true });
     }
+    // ── Cloudflare Stream Webhook ──────────────────────────────────────────────
+    if (request.method === "POST" && url.pathname === "/api/webhooks/cloudflare/stream-live") {
+      const webhookSecret = process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET?.trim();
+      const cfAuth = request.headers["cf-webhook-auth"];
+
+      // Validate webhook secret using constant-time comparison
+      if (!webhookSecret || !cfAuth) {
+        return json(response, 401, { error: "Webhook sin autorización" });
+      }
+      const expected = Buffer.from(webhookSecret, "utf8");
+      const received = Buffer.from(String(cfAuth), "utf8");
+      if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+        return json(response, 401, { error: "Secreto de webhook inválido" });
+      }
+
+      let body: unknown;
+      try {
+        body = await readBody(request);
+      } catch {
+        return json(response, 400, { error: "Body inválido" });
+      }
+
+      const webhookSchema = z.object({
+        data: z.object({
+          liveInput: z.object({
+            uid: z.string().min(1),
+          }),
+          state: z.string().optional(),
+        }),
+        event: z.string().min(1),
+        updated: z.string().optional(),
+      });
+
+      const parsed = webhookSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, { error: "Payload de webhook inválido" });
+
+      const { data: eventData, event: eventType, updated } = parsed.data;
+      const inputUid = eventData.liveInput.uid;
+
+      // Map Cloudflare event to internal status
+      const statusMap: Record<string, string> = {
+        "live_input.connected": "live",
+        "live_input.disconnected": "disconnected",
+        "live_input.errored": "provider_error",
+      };
+      const newStatus = statusMap[eventType];
+      if (!newStatus) return json(response, 200, { ok: true }); // unknown event — ignore gracefully
+
+      if (!canUseAdminSupabase()) {
+        // No DB — just acknowledge
+        return json(response, 200, { ok: true });
+      }
+
+      const supaAdmin = getAdminSupabaseClient();
+
+      // Find source by provider_input_id
+      const { data: sourceRow } = await supaAdmin
+        .from("live_sources")
+        .select("id, status, event_id")
+        .eq("provider_input_id", inputUid)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (!sourceRow) return json(response, 200, { ok: true }); // unknown input — ignore
+
+      // Deduplication: hash of input_uid + event_type + updated
+      const eventKey = createHash("sha256")
+        .update(`${inputUid}:${eventType}:${updated || ""}`)
+        .digest("hex");
+
+      const { data: existingEvent } = await supaAdmin
+        .from("live_source_webhook_events")
+        .select("id")
+        .eq("event_key", eventKey)
+        .maybeSingle();
+
+      if (existingEvent) return json(response, 200, { ok: true }); // already processed
+
+      const now = new Date().toISOString();
+      const updateData: Record<string, unknown> = {
+        status: newStatus,
+        updated_at: now,
+        last_provider_sync_at: now,
+      };
+      if (newStatus === "live") updateData.last_connected_at = now;
+      if (newStatus === "disconnected") updateData.last_disconnected_at = now;
+      if (newStatus === "provider_error") {
+        updateData.provider_error_code = "CLOUDFLARE_STREAM_ERRORED";
+      }
+
+      await supaAdmin
+        .from("live_sources")
+        .update(updateData)
+        .eq("id", sourceRow.id);
+
+      // Record deduplication entry
+      await supaAdmin.from("live_source_webhook_events").insert({
+        event_key: eventKey,
+        source_id: sourceRow.id,
+        event_type: eventType,
+      });
+
+      await logAudit(request, `webhook_${eventType.replace(".", "_")}`, sourceRow.id, "success");
+
+      return json(response, 200, { ok: true });
+    }
+
     return json(response, 404, { error: "Ruta no encontrada" });
   } catch (error) {
     if (error instanceof z.ZodError) {

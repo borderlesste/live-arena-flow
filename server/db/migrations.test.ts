@@ -11,6 +11,7 @@ const protectedTables = [
   "chat_message_reports",
   "user_favorite_matches",
   "live_sources",
+  "live_source_webhook_events",
 ];
 
 async function readMigrationSet() {
