@@ -4,7 +4,12 @@ import { publicEnv } from "@/config/env";
 import "../index.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(publicEnv.NEXT_PUBLIC_APP_URL ?? "http://localhost:8080"),
+  // metadataBase must be an absolute URL. Uses NEXT_PUBLIC_APP_URL from env.
+  // In production: set NEXT_PUBLIC_APP_URL=https://tudominio.com in Render/Vercel.
+  // Falls back to a relative base "/" which Next.js handles correctly.
+  metadataBase: publicEnv.NEXT_PUBLIC_APP_URL
+    ? new URL(publicEnv.NEXT_PUBLIC_APP_URL)
+    : new URL("https://luisromerofutbol.com"),
   title: { default: "Luis Romero Fútbol", template: "%s | Luis Romero Fútbol" },
   description: "Transmisiones, partidos, resultados y contenido deportivo en Luis Romero Fútbol.",
   applicationName: "Luis Romero Fútbol",

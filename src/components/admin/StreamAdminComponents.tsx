@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -387,6 +387,21 @@ export function StreamCredentialsPanel({
 }: CredentialsPanelProps) {
   const [showKey, setShowKey] = useState(false);
 
+  // Reset showKey whenever the source changes or revealedKey is cleared
+  // (parent sets revealedKey=null when switching sources)
+  const prevSourceId = useRef<string | null>(null);
+  useEffect(() => {
+    if (source?.id !== prevSourceId.current) {
+      setShowKey(false);
+      prevSourceId.current = source?.id ?? null;
+    }
+  }, [source?.id]);
+
+  // Also reset when revealedKey is explicitly cleared
+  useEffect(() => {
+    if (!revealedKey) setShowKey(false);
+  }, [revealedKey]);
+
   const handleRevealToggle = async () => {
     if (!showKey && !revealedKey) await onReveal();
     setShowKey((prev) => !prev);
@@ -701,18 +716,18 @@ export function ConfiguredSourcesList({
                         <DropdownMenuContent align="end" className="bg-surface-2 border-border text-foreground w-48">
                           <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                           <DropdownMenuSeparator className="bg-border/60" />
-                          <DropdownMenuItem onClick={() => onEdit(source)} className="gap-2 cursor-pointer">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(source); }} className="gap-2 cursor-pointer">
                             <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                             Editar metadatos
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onToggleEnabled(source)} className="gap-2 cursor-pointer">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onToggleEnabled(source); }} className="gap-2 cursor-pointer">
                             {isActive
                               ? <><WifiOff className="h-3.5 w-3.5" aria-hidden="true" />Desactivar señal</>
                               : <><Wifi className="h-3.5 w-3.5" aria-hidden="true" />Activar señal</>}
                           </DropdownMenuItem>
                           {source.sourceKind === "obs" && (
                             <DropdownMenuItem
-                              onClick={() => onRotate(source)}
+                              onClick={(e) => { e.stopPropagation(); onRotate(source); }}
                               className="gap-2 cursor-pointer text-warning focus:text-warning"
                             >
                               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -721,7 +736,7 @@ export function ConfiguredSourcesList({
                           )}
                           {!source.isPrimary && (
                             <DropdownMenuItem
-                              onClick={() => onSetPrimary(source)}
+                              onClick={(e) => { e.stopPropagation(); onSetPrimary(source); }}
                               className="gap-2 cursor-pointer text-primary focus:text-primary"
                             >
                               <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
@@ -730,7 +745,7 @@ export function ConfiguredSourcesList({
                           )}
                           <DropdownMenuSeparator className="bg-border/60" />
                           <DropdownMenuItem
-                            onClick={() => onDelete(source)}
+                            onClick={(e) => { e.stopPropagation(); onDelete(source); }}
                             className="gap-2 cursor-pointer text-destructive focus:text-destructive"
                           >
                             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
