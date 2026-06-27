@@ -20,6 +20,7 @@ const ProfilePage = lazy(() => import("@/views/ProfilePage"));
 const AdminPage = lazy(() => import("@/views/AdminPage"));
 const AdminSponsorsPage = lazy(() => import("@/views/AdminSponsorsPage"));
 const AdminOperationsPage = lazy(() => import("@/views/AdminOperationsPage"));
+const AdminNewsPage = lazy(() => import("@/views/AdminNewsPage"));
 const MaintenancePage = lazy(() => import("@/views/MaintenancePage"));
 const PrivacyPage = lazy(() => import("@/views/legal/PrivacyPage"));
 const TermsPage = lazy(() => import("@/views/legal/TermsPage"));
@@ -58,6 +59,7 @@ export function AppRouter() {
             <Route path="/admin" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
             <Route path="/admin/dashboard" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
             <Route path="/admin/streams" element={<AdminLayout><AdminPage /></AdminLayout>} />
+            <Route path="/admin/news" element={<AdminLayout><AdminNewsPage /></AdminLayout>} />
             <Route path="/admin/matches" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
             <Route path="/admin/sponsors" element={<AdminLayout><AdminSponsorsPage /></AdminLayout>} />
             <Route path="/admin/users" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />

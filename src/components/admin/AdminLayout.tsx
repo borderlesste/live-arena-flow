@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { Activity, BarChart3, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Megaphone, MessageSquareWarning, RadioTower, Settings, Users } from "lucide-react";
+import { Activity, BarChart3, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Megaphone, MessageSquareWarning, Newspaper, RadioTower, Settings, Users } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const items = [
   { to: "/admin", label: "Dashboard", icon: Activity, end: true },
   { to: "/admin/streams", label: "Transmisiones", icon: RadioTower },
+  { to: "/admin/news", label: "Noticias", icon: Newspaper },
   { to: "/admin/matches", label: "Partidos", icon: CalendarDays },
   { to: "/admin/sponsors", label: "Patrocinadores", icon: Megaphone },
   { to: "/admin/users", label: "Usuarios", icon: Users },
@@ -32,9 +33,33 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <BrandLogo variant="white" size={collapsed ? "md" : "sm"} withWordmark={!collapsed} decorative />
         </div>
         <nav className="mt-3 space-y-1" aria-label="Administración">
-          {items.map((item) => <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn("flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground", isActive && "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground", collapsed && "justify-center px-2")}><item.icon className="h-5 w-5 shrink-0" /><span className={cn(collapsed && "sr-only")}>{item.label}</span></NavLink>)}
+          {items.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  isActive && "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
+                  collapsed && "justify-center px-2",
+                )
+              }
+            >
+              <item.icon className="h-5 w-5 shrink-0" />
+              <span className={cn(collapsed && "sr-only")}>{item.label}</span>
+            </NavLink>
+          ))}
         </nav>
-        <Button variant="ghost" size="sm" onClick={() => setCollapsed((value) => !value)} className="mt-3 w-full text-sidebar-foreground hover:bg-sidebar-accent" aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}>{collapsed ? <ChevronRight /> : <><ChevronLeft /><span>Colapsar</span></>}</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setCollapsed((v) => !v)}
+          className="mt-3 w-full text-sidebar-foreground hover:bg-sidebar-accent"
+          aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+        >
+          {collapsed ? <ChevronRight /> : <><ChevronLeft /><span>Colapsar</span></>}
+        </Button>
       </aside>
       <div className="min-w-0">{children}</div>
     </div>

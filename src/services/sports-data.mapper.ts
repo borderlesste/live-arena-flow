@@ -61,6 +61,23 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
       });
 
       const managedSources = videoSources.filter((source) => source.matchId === event.id);
+
+      // Only include streams that have a playable URL — OBS sources without
+      // STREAM_PLAYBACK_BASE_URL configured won't have a URL yet.
+      const playableStreams = managedSources.filter(
+        (source) => source.purpose !== "highlight" && (source.url || source.embedUrl),
+      );
+
+      // If any OBS source for this match is actively live (detected via MediaMTX),
+      // promote the match status to "live" regardless of what the sports API says.
+      // Also promote if any OBS source is enabled and in connecting/ready state —
+      // this makes the match appear on /live even when OBS hasn't started yet,
+      // allowing viewers to wait for the stream to begin.
+      const hasActiveObsSource = managedSources.some(
+        (source) => source.sourceKind === "obs" && source.isEnabled !== false &&
+          (source.status === "live" || source.status === "connecting" || source.status === "ready"),
+      );
+      const effectiveStatus = hasActiveObsSource ? "live" : event.status;
       const apiHighlight = event.highlightUrl
         ? [{ id: `provider-video-${event.id}`, type: "youtube" as const, embedUrl: youtubeEmbed(event.highlightUrl), title: "Highlight oficial", isExternal: true, requiresConsent: true, provider: "youtube" as const, purpose: "highlight" as const }]
         : [];
@@ -69,10 +86,10 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
       return {
         id: event.id, sport, competitionId: event.competition.id,
         homeTeamId: event.homeTeam.id, awayTeamId: event.awayTeam.id,
-        homeScore: event.homeScore, awayScore: event.awayScore, status: event.status,
-        clock: event.status === "live" ? event.statusLabel ?? "En vivo" : undefined,
+        homeScore: event.homeScore, awayScore: event.awayScore, status: effectiveStatus,
+        clock: effectiveStatus === "live" ? event.statusLabel ?? "En vivo" : undefined,
         startsAt: event.startsAt, venue: event.venue ?? event.city ?? "Sede por confirmar",
-        streams: managedSources.filter((source) => source.purpose !== "highlight"), highlights,
+        streams: playableStreams, highlights,
         hasReplay: managedSources.some((source) => source.purpose === "highlight"),
         hasSummary: highlights.length > 0,
       };

@@ -39,6 +39,10 @@ const HomePage = () => {
   const getTeam = (id: string) => bundle.teams.find((team) => team.id === id)!;
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
+  // Split sponsors: main tier → slot under player; rest → slot under news
+  const mainSponsors = allSponsors.filter((s) => s.tier === "main" || s.tier === "official");
+  const partnerSponsors = allSponsors.filter((s) => s.tier === "partner");
+
   const [activeId, setActiveId] = useState(live[0]?.id);
   const featured = [...live, ...upcoming, ...finished];
   const activeMatch = featured.find((match) => match.id === activeId) ?? featured[0];
@@ -127,7 +131,10 @@ const HomePage = () => {
               </div>
 
               {/* Banner ad slot under the player */}
-              <AdvertisementSlot variant="banner" />
+              <AdvertisementSlot
+                variant="banner"
+                sponsors={mainSponsors.length > 0 ? mainSponsors : allSponsors.slice(0, 2)}
+              />
             </div>
 
             {/* Chat */}
@@ -240,7 +247,10 @@ const HomePage = () => {
             {allNews.slice(0, 6).map((n) => <NewsCard key={n.id} article={n} />)}
           </div>}
         </div>
-        <AdvertisementSlot variant="banner" />
+        <AdvertisementSlot
+          variant="banner"
+          sponsors={partnerSponsors.length > 0 ? partnerSponsors : allSponsors.slice(2)}
+        />
       </section>
     </div>
   );
