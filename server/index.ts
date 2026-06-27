@@ -101,7 +101,7 @@ const videoSourceSchema = streamPayloadBaseSchema.extend({
   createdAt: z.string(),
 }).superRefine(validateStreamPayload).superRefine(validateObsIngest);
 const managedStreamSchema = streamPayloadBaseSchema.superRefine(validateStreamPayload).superRefine(validateObsIngest);
-const newsSchema = z.object({ id: z.string(), title: z.string(), category: z.string(), excerpt: z.string(), publishedAt: z.string(), imageHue: z.number() });
+const newsSchema = z.object({ id: z.string().min(1), title: z.string().min(1).max(200), category: z.string().min(1).max(60), excerpt: z.string().min(1).max(400), body: z.string().max(20000).optional(), coverImageUrl: z.string().url().optional().or(z.literal("")), publishedAt: z.string().datetime(), imageHue: z.number().int().min(0).max(360) });
 const highlightSchema = z.object({ id: z.string(), title: z.string(), matchId: z.string().optional(), durationSec: z.number(), publishedAt: z.string(), imageHue: z.number(), kind: z.enum(["summary", "play", "clip", "interview", "replay"]) });
 const chatSchema = z.object({ text: z.string().trim().min(1).max(280), channel: z.enum(["community", "official"]), clientId: z.string().min(1).max(80), displayName: z.string().min(1).max(40) });
 const contactSchema = z.object({
@@ -367,15 +367,24 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
 }
 
 function publicVideoSources(sources: StoredVideoSource[]) {
-  return sources.map(({ obs: _obs, ...source }) => {
-    if (source.sourceKind === "obs") {
-      return {
-        ...source,
-        url: source.playbackUrl || source.url,
-      };
-    }
-    return source;
-  });
+  return sources
+    .filter((source) => source.isEnabled !== false)
+    .map(({ obs: _obs, streamKeyCiphertext: _cipher, streamKeyIv: _iv, ...source }) => {
+      if (source.sourceKind === "obs") {
+        return {
+          ...source,
+          // Expose playback URL for the public player; strip all ingest credentials
+          url: source.playbackUrl || source.url || undefined,
+          ingestUrl: undefined,
+          ingestProtocol: undefined,
+          streamKeyLast4: undefined,
+          // Keep status and sourceKind so the mapper can promote match to live
+          status: source.status,
+          sourceKind: source.sourceKind,
+        };
+      }
+      return source;
+    });
 }
 
 function managedVideoSources(sources: StoredVideoSource[]) {

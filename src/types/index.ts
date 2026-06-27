@@ -146,8 +146,12 @@ export interface NewsArticle {
   title: string;
   category: string;
   excerpt: string;
+  /** Full article body (markdown or plain text). Optional for backward compat. */
+  body?: string;
+  /** Cover image URL. When absent, a gradient using imageHue is shown instead. */
+  coverImageUrl?: string;
   publishedAt: string;
-  imageHue: number; // 0-360, used for generated cover gradient
+  imageHue: number; // 0-360, used for generated cover gradient when no coverImageUrl
 }
 
 export interface Highlight {
