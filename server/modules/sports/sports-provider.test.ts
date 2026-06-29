@@ -148,6 +148,36 @@ describe("SportSRC V2 provider", () => {
     fetchMock.mockRestore();
   });
 
+  it("skips provider placeholders with invalid timestamps", async () => {
+    const invalidMatch = {
+      ...sportSrcMatch,
+      id: "germany  third place group abcdf-1782548729",
+      timestamp: 0,
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(listPayload(invalidMatch)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(new SportSrcProvider("license-key").eventsByDate("2026-06-29")).resolves.toEqual([]);
+    expect(warning).toHaveBeenCalledWith("[sportsrc] skipped invalid match", expect.objectContaining({
+      reason: "SPORTSRC_INVALID_TIMESTAMP",
+    }));
+
+    warning.mockRestore();
+    fetchMock.mockRestore();
+  });
+
+  it("treats missing provider details as not found", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not found", { status: 404 }));
+
+    await expect(new SportSrcProvider("license-key").eventById("sportsrc-missing-match")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    fetchMock.mockRestore();
+  });
+
   it("does not request foreign IDs and rejects invalid dates", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const provider = new SportSrcProvider("license-key");

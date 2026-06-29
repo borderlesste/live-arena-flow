@@ -50,7 +50,7 @@ const matchSchema = z.object({
 
 const matchGroupSchema = z.object({
   league: leagueSchema,
-  matches: z.array(matchSchema),
+  matches: z.array(z.unknown()),
 }).passthrough();
 
 const listEnvelopeSchema = z.object({
@@ -89,6 +89,7 @@ function entityId(prefix: string, value: string): string {
 function normalizeTimestamp(value: string | number): string {
   if (typeof value === "number" || /^\d+$/.test(value)) {
     const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) throw new Error("SPORTSRC_INVALID_TIMESTAMP");
     const milliseconds = numeric < 10_000_000_000 ? numeric * 1_000 : numeric;
     const parsed = new Date(milliseconds);
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
@@ -173,7 +174,24 @@ export class SportSrcProvider implements SportsProvider {
 
   private async list(params: Record<string, string>): Promise<NormalizedSportsEvent[]> {
     const payload = listEnvelopeSchema.parse(await this.request({ type: "matches", sport: "football", ...params }));
-    return payload.data.flatMap((group) => group.matches.map((match) => normalize(match, group.league)));
+    return payload.data.flatMap((group) => group.matches.flatMap((candidate) => {
+      const parsed = matchSchema.safeParse(candidate);
+      if (!parsed.success) {
+        console.warn("[sportsrc] skipped malformed match", { reason: "SPORTSRC_SCHEMA_INVALID" });
+        return [];
+      }
+      try {
+        return [normalize(parsed.data, group.league)];
+      } catch (error) {
+        console.warn("[sportsrc] skipped invalid match", {
+          matchId: parsed.data.id,
+          reason: error instanceof Error && error.message.startsWith("SPORTSRC_")
+            ? error.message
+            : "SPORTSRC_NORMALIZATION_FAILED",
+        });
+        return [];
+      }
+    }));
   }
 
   eventsByDate(date: string) {
@@ -191,8 +209,13 @@ export class SportSrcProvider implements SportsProvider {
     if (!id.startsWith("sportsrc-")) return undefined;
     const externalId = id.slice("sportsrc-".length);
     if (!externalId) return undefined;
-    const payload = detailEnvelopeSchema.parse(await this.request({ type: "detail", id: externalId }));
-    return normalize(payload.data.match_info, undefined, payload.data.info?.venue);
+    try {
+      const payload = detailEnvelopeSchema.parse(await this.request({ type: "detail", id: externalId }));
+      return normalize(payload.data.match_info, undefined, payload.data.info?.venue);
+    } catch (error) {
+      if (error instanceof Error && error.message === "SPORTS_PROVIDER_404") return undefined;
+      throw error;
+    }
   }
 }
 
