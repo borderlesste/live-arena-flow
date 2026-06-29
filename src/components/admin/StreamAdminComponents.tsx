@@ -191,11 +191,12 @@ export function SourceGeneralForm({
           </div>
         </div>
 
-        {/* Playback URL — solo para fuentes manuales */}
-        {!isObsEnabled ? (
+        {/* Custom OBS sources receive an independent HTTPS playback URL after creation. */}
+        {!isObsEnabled || isEditing ? (
           <div className="space-y-1.5 animate-fadeIn">
             <Label htmlFor="source-playback">
-              URL de reproducción <span className="text-destructive" aria-hidden="true">*</span>
+              {isObsEnabled ? "URL HTTPS pública independiente" : "URL de reproducción"}
+              {!isObsEnabled && <span className="text-destructive" aria-hidden="true">*</span>}
             </Label>
             <Input
               id="source-playback"
@@ -212,7 +213,7 @@ export function SourceGeneralForm({
           </div>
         ) : (
           <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground animate-fadeIn" role="note">
-            <span className="font-medium text-primary">OBS activo:</span> La URL de reproducción se generará automáticamente a partir del servidor de ingesta cuando crees la fuente.
+            <span className="font-medium text-primary">OBS activo:</span> Cloudflare generará el HLS; el proveedor custom quedará sin publicación hasta configurar una URL HTTPS independiente.
           </div>
         )}
 

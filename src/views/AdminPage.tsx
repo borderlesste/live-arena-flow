@@ -256,9 +256,8 @@ const AdminPage = () => {
         title: title.trim(),
         usageType: obsEnabled ? "live" : purpose,
       };
-      if (!obsEnabled) {
+      if (!obsEnabled || playbackUrl.trim()) {
         patch.playbackUrl = playbackUrl.trim();
-        patch.url = playbackUrl.trim();
       }
       try {
         const updatedList = await saveManagedVideoSource({ id: formId, ...patch }, token, true);
@@ -313,18 +312,18 @@ const AdminPage = () => {
       setSources(updatedList);
 
       // Select newly created source and show credentials immediately
-      const freshSource = updatedList.find((s) => s.id === created.id) ?? created;
+      const freshSource = updatedList.find((s) => s.id === created.source.id) ?? created.source;
       setSelectedSource(freshSource);
 
-      // The POST response returns the stream key in plain text — display it immediately
-      if (created.obs?.streamKey) {
-        setRevealedKey(created.obs.streamKey as string);
-      }
+      // Credentials are returned once for a new provisioning response only.
+      setRevealedKey(created.credentials?.streamKey ?? null);
 
       await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
       toast.success(
         obsEnabled
-          ? "Fuente OBS creada. Copia el servidor y la clave en OBS Studio."
+          ? created.replayed
+            ? "La solicitud ya había sido procesada. Usa Revelar clave si la necesitas."
+            : "Fuente OBS creada. Copia el servidor y la clave en OBS Studio."
           : "Fuente de transmisión creada correctamente.",
       );
 

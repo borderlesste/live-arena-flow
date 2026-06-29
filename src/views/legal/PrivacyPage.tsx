@@ -1,4 +1,5 @@
 import { LegalLayout } from "./LegalLayout";
+import { Link } from "react-router-dom";
 
 const PrivacyPage = () => (
   <LegalLayout title="Privacidad" description="Cómo tratamos tus datos en Luis Romero Fútbol.">
@@ -8,7 +9,7 @@ const PrivacyPage = () => (
     <h2>Finalidad</h2>
     <p>Mejorar la experiencia, prevenir abusos y ofrecer contenido relevante.</p>
     <h2>Derechos</h2>
-    <p>Puedes solicitar acceso, rectificación o eliminación escribiendo a <a href="/contact">contacto</a>.</p>
+    <p>Puedes solicitar acceso, rectificación o eliminación escribiendo a <Link to="/contact">contacto</Link>.</p>
   </LegalLayout>
 );
 export default PrivacyPage;

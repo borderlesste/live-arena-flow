@@ -12,6 +12,7 @@ const protectedTables = [
   "user_favorite_matches",
   "live_sources",
   "live_source_webhook_events",
+  "live_source_provider_cleanup_jobs",
 ];
 
 async function readMigrationSet() {
@@ -30,6 +31,7 @@ describe("Supabase migrations", () => {
     await db.exec(`
       create role anon nologin;
       create role authenticated nologin;
+      create role service_role nologin;
       create schema auth;
       create table auth.users (
         id uuid primary key,
@@ -39,9 +41,12 @@ describe("Supabase migrations", () => {
       );
       create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
     `);
-    for (const migration of await readMigrationSet()) {
+    const migrations = await readMigrationSet();
+    for (const migration of migrations) {
       await expect(db.exec(migration.sql), migration.file).resolves.toBeDefined();
     }
+    const stabilization = migrations.find((migration) => migration.file === "20260628190000_security_and_streaming_stabilization.sql");
+    await expect(db.exec(stabilization!.sql), "stabilization migration must be safe to resume").resolves.toBeDefined();
     const result = await db.query<{ count: number }>("select count(*)::int as count from pg_policies where schemaname = 'public'");
     expect(result.rows[0].count).toBeGreaterThanOrEqual(25);
     await db.close();
@@ -64,4 +69,48 @@ describe("Supabase migrations", () => {
     expect(sql.match(/security definer/g)?.length).toBeGreaterThanOrEqual(2);
     expect(sql.match(/set search_path = ''/g)?.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("removes direct access to protected profile, chat, metrics, and live-source data", async () => {
+    const db = new PGlite();
+    await db.exec(`
+      create role anon nologin;
+      create role authenticated nologin;
+      create role service_role nologin;
+      create schema auth;
+      create table auth.users (
+        id uuid primary key,
+        email text,
+        raw_user_meta_data jsonb not null default '{}'::jsonb,
+        raw_app_meta_data jsonb not null default '{}'::jsonb
+      );
+      create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+    `);
+    for (const migration of await readMigrationSet()) await db.exec(migration.sql);
+
+    const privileges = await db.query<{
+      profile_status_update: boolean;
+      profile_display_update: boolean;
+      chat_update: boolean;
+      metrics_execute: boolean;
+      raw_sources_select: boolean;
+      delete_rpc_execute: boolean;
+    }>(`
+      select
+        has_column_privilege('authenticated', 'public.profiles', 'account_status', 'UPDATE') as profile_status_update,
+        has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE') as profile_display_update,
+        has_table_privilege('authenticated', 'public.chat_messages', 'UPDATE') as chat_update,
+        has_function_privilege('authenticated', 'public.metrics_overview(timestamptz,timestamptz)', 'EXECUTE') as metrics_execute,
+        has_table_privilege('authenticated', 'public.live_sources', 'SELECT') as raw_sources_select,
+        has_function_privilege('authenticated', 'public.delete_own_chat_message(uuid)', 'EXECUTE') as delete_rpc_execute
+    `);
+    expect(privileges.rows[0]).toEqual({
+      profile_status_update: false,
+      profile_display_update: true,
+      chat_update: false,
+      metrics_execute: false,
+      raw_sources_select: false,
+      delete_rpc_execute: true,
+    });
+    await db.close();
+  }, 20_000);
 });

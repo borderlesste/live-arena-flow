@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const adminToken = process.env.QA_ADMIN_TOKEN || process.env.ADMIN_API_TOKEN || "qa-admin-token";
+const adminToken = process.env.QA_ADMIN_TOKEN || "qa-admin-token";
 
 function qaSource(overrides: Record<string, unknown> = {}) {
   return {

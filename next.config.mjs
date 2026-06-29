@@ -1,5 +1,15 @@
 const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const publicSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+
+function isUsablePublicKey(key) {
+  const value = key?.trim();
+  return Boolean(value?.startsWith("sb_publishable_"));
+}
+
+const publicSupabasePublishableKey = [
+  process.env.SUPABASE_PUBLISHABLE_KEY,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+].map((key) => key?.trim()).find(isUsablePublicKey);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -7,7 +17,7 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   env: {
     NEXT_PUBLIC_SUPABASE_URL: publicSupabaseUrl,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: publicSupabaseAnonKey,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicSupabasePublishableKey,
   },
   allowedDevOrigins: ["127.0.0.1"],
   experimental: { webpackBuildWorker: false },

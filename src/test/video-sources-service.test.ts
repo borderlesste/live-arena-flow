@@ -81,24 +81,25 @@ describe("createLiveSource", () => {
     ingestProtocol: "rtmps" as const,
     recordingEnabled: false,
     lowLatencyEnabled: false,
-    idempotencyKey: "idem-key-001",
+    idempotencyKey: "11111111-1111-4111-8111-111111111111",
   };
 
   it("POSTs to /api/admin/live-sources with correct headers", async () => {
-    const fetchSpy = mockFetch({ id: "new-1", ...payload, type: "obs_hls", isExternal: false, createdAt: "2026-06-25T00:00:00Z" });
+    const fetchSpy = mockFetch({ source: { id: "new-1", ...payload, type: "obs_hls", isExternal: false, createdAt: "2026-06-25T00:00:00Z" }, replayed: false });
     await createLiveSource(payload, TOKEN);
     const [url, options] = fetchSpy.mock.calls[0];
     expect(url).toBe(`${BASE}/admin/live-sources`);
     expect((options as RequestInit).method).toBe("POST");
-    expect(((options as RequestInit).headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-key-001");
+    expect(((options as RequestInit).headers as Record<string, string>)["Idempotency-Key"]).toBe(payload.idempotencyKey);
     expect(((options as RequestInit).headers as Record<string, string>)["Authorization"]).toBe(`Bearer ${TOKEN}`);
   });
 
   it("includes the idempotency key in the request header", async () => {
-    const fetchSpy = mockFetch({ id: "new-1", ...payload, type: "obs_hls", isExternal: false, createdAt: "2026-06-25T00:00:00Z" });
-    await createLiveSource({ ...payload, idempotencyKey: "unique-key-xyz" }, TOKEN);
+    const uniqueKey = "22222222-2222-4222-8222-222222222222";
+    const fetchSpy = mockFetch({ source: { id: "new-1", ...payload, type: "obs_hls", isExternal: false, createdAt: "2026-06-25T00:00:00Z" }, replayed: false });
+    await createLiveSource({ ...payload, idempotencyKey: uniqueKey }, TOKEN);
     const [, options] = fetchSpy.mock.calls[0];
-    expect(((options as RequestInit).headers as Record<string, string>)["Idempotency-Key"]).toBe("unique-key-xyz");
+    expect(((options as RequestInit).headers as Record<string, string>)["Idempotency-Key"]).toBe(uniqueKey);
   });
 
   it("returns the created source including OBS credentials on success", async () => {
@@ -106,12 +107,16 @@ describe("createLiveSource", () => {
       id: "new-1", title: "Test OBS", matchId: "m1", type: "obs_hls", isExternal: false,
       createdAt: "2026-06-25T00:00:00Z",
       ingestUrl: "rtmps://ingest.example.com:443/live",
-      obs: { protocol: "rtmps", serverUrl: "rtmps://ingest.example.com:443/live", streamKey: "realKey1234A92F" },
     };
-    mockFetch(created);
+    mockFetch({
+      source: created,
+      credentials: { ingestUrl: created.ingestUrl, ingestProtocol: "rtmps", streamKey: "realKey1234A92F" },
+      replayed: false,
+    });
     const result = await createLiveSource(payload, TOKEN);
-    expect(result.id).toBe("new-1");
-    expect((result.obs as unknown as Record<string, unknown>)?.streamKey).toBe("realKey1234A92F");
+    expect(result.source.id).toBe("new-1");
+    expect(result.credentials?.streamKey).toBe("realKey1234A92F");
+    expect(result.source.obs?.streamKey).toBeUndefined();
   });
 
   it("throws a descriptive error when provider fails (500)", async () => {

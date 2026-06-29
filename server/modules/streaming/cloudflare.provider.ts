@@ -63,13 +63,13 @@ function mapCfStateToInternal(state: CfLiveInputState | undefined): LiveInputSta
     case "reconnected":
       return "live";
     case "reconnecting":
-      return "connecting";
+      return "reconnecting";
     case "client_disconnect":
     case "ttl_exceeded":
       return "disconnected";
     case "failed_to_connect":
     case "failed_to_reconnect":
-      return "error";
+      return "provider_error";
     case "new_configuration_accepted":
       return "ready";
     default:
@@ -140,14 +140,13 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
     timeoutMs: number,
     body?: unknown,
   ): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
     let lastError: unknown;
     const maxAttempts = method === "POST" ? 1 : 3; // POST is not idempotent — no retry
     const retryableCodes = new Set([429, 500, 502, 503, 504]);
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const res = await fetch(url, {
           method,
@@ -178,10 +177,10 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
         if (attempt >= maxAttempts) break;
         const delay = 200 * 2 ** (attempt - 1) + Math.random() * 100;
         await new Promise((r) => setTimeout(r, delay));
+      } finally {
+        clearTimeout(timeout);
       }
     }
-
-    clearTimeout(timeout);
     throw lastError instanceof Error ? lastError : new Error("CLOUDFLARE_NETWORK_ERROR");
   }
 
@@ -189,6 +188,7 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
     const cfg = getConfig();
 
     const payload: Record<string, unknown> = {
+      enabled: true,
       meta: {
         name: input.name,
         environment: process.env.NODE_ENV || "production",
@@ -258,11 +258,11 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
       );
       const parsed = cfApiResponseSchema.safeParse(raw);
       if (!parsed.success || !parsed.data.success || !parsed.data.result) {
-        return "error";
+        return "provider_error";
       }
       return mapCfStateToInternal(parsed.data.result.status?.current?.state);
     } catch {
-      return "error";
+      return "provider_error";
     }
   }
 
@@ -297,15 +297,19 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
       `${this.baseUrl(cfg.accountId)}/${encodeURIComponent(providerInputId)}`,
       cfg.apiToken,
       cfg.timeoutMs,
-      { meta: {}, recording: { mode: "off" } },
+      { enabled: false },
     );
-    // Cloudflare doesn't have a direct "disable" — we mark it via the local DB.
-    // The Live Input still exists but we track is_enabled=false locally.
   }
 
   async enableLiveInput(providerInputId: string): Promise<void> {
-    // Cloudflare Live Inputs are always active unless deleted.
-    // Local is_enabled=true is sufficient.
+    const cfg = getConfig();
+    await this.request<unknown>(
+      "PUT",
+      `${this.baseUrl(cfg.accountId)}/${encodeURIComponent(providerInputId)}`,
+      cfg.apiToken,
+      cfg.timeoutMs,
+      { enabled: true },
+    );
   }
 
   async deleteLiveInput(providerInputId: string): Promise<void> {

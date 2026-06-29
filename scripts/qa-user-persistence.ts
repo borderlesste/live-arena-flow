@@ -1,9 +1,10 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { selectSupabasePublicKey } from "../server/modules/auth/supabase-key.js";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+const anonKey = selectSupabasePublicKey();
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
 if (!supabaseUrl || !anonKey || !serviceRoleKey) {

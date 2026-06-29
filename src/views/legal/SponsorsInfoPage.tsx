@@ -1,6 +1,7 @@
 import { LegalLayout } from "./LegalLayout";
 import { SponsorLogo } from "@/components/sponsors/SponsorCarousel";
 import { useContentData } from "@/hooks/useContentData";
+import { Link } from "react-router-dom";
 
 const SponsorsInfoPage = () => {
   const { sponsors } = useContentData();
@@ -12,7 +13,7 @@ const SponsorsInfoPage = () => {
           {sponsors.map((sponsor) => <SponsorLogo key={sponsor.id} sponsor={sponsor} />)}
         </div>
       )}
-      <p className="mt-6">¿Quieres patrocinar un evento? Escríbenos desde la página de <a href="/contact">contacto</a>.</p>
+      <p className="mt-6">¿Quieres patrocinar un evento? Escríbenos desde la página de <Link to="/contact">contacto</Link>.</p>
     </LegalLayout>
   );
 };

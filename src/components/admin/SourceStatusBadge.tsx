@@ -1,9 +1,10 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { LiveSourceStatus } from "@/schemas/live-source.schema";
 
 interface StatusBadgeProps {
-  status?: "provisioning" | "ready" | "connecting" | "live" | "disconnected" | "disabled" | "error";
+  status?: LiveSourceStatus;
   className?: string;
 }
 
@@ -22,8 +23,12 @@ export function SourceStatusBadge({ status, className }: StatusBadgeProps) {
       label: "Esperando señal",
       className: "bg-muted text-muted-foreground hover:bg-muted/80 border-border",
     },
-    connecting: {
-      label: "Conectando",
+    waiting_signal: {
+      label: "Esperando señal",
+      className: "bg-info/15 text-info hover:bg-info/20 border-info/20 animate-pulse",
+    },
+    reconnecting: {
+      label: "Reconectando",
       className: "bg-info/15 text-info hover:bg-info/20 border-info/20 animate-pulse",
     },
     live: {
@@ -39,8 +44,16 @@ export function SourceStatusBadge({ status, className }: StatusBadgeProps) {
       label: "Deshabilitado",
       className: "bg-muted text-muted-foreground hover:bg-muted/80 border-border opacity-60",
     },
-    error: {
+    provider_error: {
       label: "Error",
+      className: "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/20",
+    },
+    deletion_pending: {
+      label: "Eliminación pendiente",
+      className: "bg-warning/15 text-warning hover:bg-warning/20 border-warning/20",
+    },
+    deletion_failed: {
+      label: "Error al eliminar",
       className: "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/20",
     },
   };

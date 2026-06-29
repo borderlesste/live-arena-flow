@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { ChatMessage, Highlight, NewsArticle, Sponsor, StreamSource, StreamType } from "../src/types/index.js";
 import type { ManagedSponsor } from "../src/schemas/sponsor.schema.js";
+import type { LiveSourceStatus } from "../src/schemas/live-source.schema.js";
 
 export type StoredSponsor = Sponsor & Partial<ManagedSponsor>;
 
@@ -24,6 +25,7 @@ export interface StoredVideoSource {
   usageType?: "live" | "highlight" | "prerecorded";
   playbackFormat?: string;
   playbackUrl?: string;
+  playbackUrlVerified?: boolean;
   providerInputId?: string;
   ingestProtocol?: "rtmp" | "rtmps" | "srt";
   ingestUrl?: string;
@@ -31,7 +33,7 @@ export interface StoredVideoSource {
   streamKeyIv?: string;
   streamKeyLast4?: string;
   credentialsVersion?: number;
-  status?: "provisioning" | "ready" | "connecting" | "live" | "disconnected" | "disabled" | "error";
+  status?: LiveSourceStatus;
   statusMessage?: string;
   isEnabled?: boolean;
   isPrimary?: boolean;
@@ -40,6 +42,8 @@ export interface StoredVideoSource {
   lastConnectedAt?: string;
   lastDisconnectedAt?: string;
   updatedAt?: string;
+  idempotencyKey?: string;
+  idempotencyFingerprint?: string;
 }
 
 export interface UserPreferences {

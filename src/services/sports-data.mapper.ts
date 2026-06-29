@@ -70,12 +70,9 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
 
       // If any OBS source for this match is actively live (detected via MediaMTX),
       // promote the match status to "live" regardless of what the sports API says.
-      // Also promote if any OBS source is enabled and in connecting/ready state —
-      // this makes the match appear on /live even when OBS hasn't started yet,
-      // allowing viewers to wait for the stream to begin.
       const hasActiveObsSource = managedSources.some(
         (source) => source.sourceKind === "obs" && source.isEnabled !== false &&
-          (source.status === "live" || source.status === "connecting" || source.status === "ready"),
+          source.status === "live",
       );
       const effectiveStatus = hasActiveObsSource ? "live" : event.status;
       const apiHighlight = event.highlightUrl

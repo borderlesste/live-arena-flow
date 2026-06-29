@@ -8,6 +8,12 @@
  * A real OBS transmission test requires manual verification — see docs/streaming-obs.md.
  */
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+interface E2ESource {
+  id: string;
+  [key: string]: unknown;
+}
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +53,7 @@ const CREATED_OBS_SOURCE = {
   usageType: "live",
   ingestProtocol: "rtmps",
   ingestUrl: "rtmps://ingest.example.com:443/live",
-  playbackUrl: "https://cdn.example.com/live/e2ekey1234A92F/index.m3u8",
+  playbackUrl: undefined,
   streamKeyLast4: "A92F",
   hasStreamKey: true,
   status: "ready",
@@ -61,7 +67,6 @@ const CREATED_OBS_SOURCE = {
   obs: {
     protocol: "rtmps",
     serverUrl: "rtmps://ingest.example.com:443/live",
-    streamKey: "e2ekey1234A92F",
     hasStreamKey: true,
   },
 };
@@ -84,58 +89,69 @@ const CREATED_MANUAL_SOURCE = {
 
 // ── Setup helper ───────────────────────────────────────────────────────────────
 
-async function setupAdminPage(page: any, initialSources: any[] = []) {
+async function setupAdminPage(page: Page, initialSources: E2ESource[] = []) {
   // Auth: profile endpoint
-  await page.route("**/api/profile", (route: any) =>
+  await page.route("**/api/profile", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify(ADMIN_PROFILE) }),
   );
 
   // Auth: Supabase profile endpoint (used by useAuth hook)
-  await page.route("**/auth/v1/**", (route: any) =>
+  await page.route("**/auth/v1/**", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify({ user: { id: "qa-admin-id", email: "admin@example.com", user_metadata: { role: "admin" } } }) }),
   );
 
-  await page.route("**/rest/v1/profiles*", (route: any) =>
+  await page.route("**/rest/v1/profiles*", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify([{ id: "qa-admin-id", display_name: "QA Admin", role: "admin" }]) }),
   );
 
-  await page.route("**/rest/v1/user_roles*", (route: any) =>
+  await page.route("**/rest/v1/user_roles*", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify([{ user_id: "qa-admin-id", role: "admin" }]) }),
   );
 
   // Sports data
-  await page.route("**/api/sports/events*", (route: any) =>
+  await page.route("**/api/sports/events*", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify({ provider: "e2e", events: [QA_EVENT] }) }),
   );
-  await page.route("**/api/sports/live*", (route: any) =>
+  await page.route("**/api/sports/live*", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify({ provider: "e2e", events: [] }) }),
   );
 
   // Public video sources
-  await page.route("**/api/video-sources", (route: any) =>
+  await page.route("**/api/video-sources", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify([]) }),
   );
 
   // Admin live-sources list — dynamic: updated after creation
   let sources = [...initialSources];
-  await page.route("**/api/admin/live-sources", async (route: any) => {
+  await page.route("**/api/admin/live-sources", async (route) => {
     const method = route.request().method();
     if (method === "GET") {
       await route.fulfill({ contentType: "application/json", body: JSON.stringify(sources) });
       return;
     }
     if (method === "POST") {
-      const body = JSON.parse(route.request().postData() || "{}");
+      const body = JSON.parse(route.request().postData() || "{}") as { sourceKind?: string };
       const newSource = body.sourceKind === "obs" ? CREATED_OBS_SOURCE : CREATED_MANUAL_SOURCE;
       sources = [...sources, newSource];
-      await route.fulfill({ contentType: "application/json", body: JSON.stringify(newSource) });
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          source: newSource,
+          credentials: body.sourceKind === "obs" ? {
+            ingestUrl: "rtmps://ingest.example.com:443/live",
+            ingestProtocol: "rtmps",
+            streamKey: "e2ekey1234A92F",
+          } : undefined,
+          replayed: false,
+        }),
+      });
       return;
     }
     await route.continue();
   });
 
   // Admin live-sources detail endpoints
-  await page.route("**/api/admin/live-sources/**", async (route: any) => {
+  await page.route("**/api/admin/live-sources/**", async (route) => {
     const method = route.request().method();
     const url = route.request().url();
 
@@ -178,12 +194,12 @@ async function setupAdminPage(page: any, initialSources: any[] = []) {
   });
 
   // Status polling endpoint
-  await page.route("**/api/admin/live-sources/status*", (route: any) =>
+  await page.route("**/api/admin/live-sources/status*", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify([]) }),
   );
 
   // Brand settings
-  await page.route("**/api/brand*", (route: any) =>
+  await page.route("**/api/brand*", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify({ platformName: "Test Platform" }) }),
   );
 
@@ -235,7 +251,7 @@ test.describe("Admin streams — manual source creation", () => {
     await postPromise;
 
     // Verify source appears in the list
-    await expect(page.getByText("Señal Manual E2E")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole("button", { name: /fuente: señal manual e2e/i })).toBeVisible({ timeout: 8_000 });
   });
 
   test("shows validation error when title is empty", async ({ page }) => {
@@ -246,7 +262,7 @@ test.describe("Admin streams — manual source creation", () => {
     await page.getByLabel(/nombre de la señal/i).fill("");
     await page.getByRole("button", { name: /crear fuente/i }).click();
 
-    await expect(page.getByRole("alert")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Introduce un nombre para la señal.")).toBeVisible({ timeout: 5_000 });
   });
 
   test("shows validation error when URL is empty for manual source", async ({ page }) => {
@@ -257,7 +273,7 @@ test.describe("Admin streams — manual source creation", () => {
     await page.getByLabel(/nombre de la señal/i).fill("Test sin URL");
     await page.getByRole("button", { name: /crear fuente/i }).click();
 
-    await expect(page.getByRole("alert")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Introduce la URL de reproducción.")).toBeVisible({ timeout: 5_000 });
   });
 });
 
@@ -306,7 +322,7 @@ test.describe("Admin streams — OBS source creation", () => {
     await postPromise;
 
     // Credentials panel should show OBS details
-    await expect(page.getByText("rtmps://ingest.example.com:443/live")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole("textbox", { name: /servidor obs/i })).toHaveValue("rtmps://ingest.example.com:443/live", { timeout: 8_000 });
   });
 
   test("shows OBS ingest URL in credentials panel after creation", async ({ page }) => {
@@ -317,7 +333,7 @@ test.describe("Admin streams — OBS source creation", () => {
     const card = page.getByRole("button", { name: /fuente: señal obs e2e/i }).first();
     if (await card.isVisible()) {
       await card.click();
-      await expect(page.getByLabelText(/servidor obs/i)).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByRole("textbox", { name: /servidor obs/i })).toBeVisible({ timeout: 5_000 });
     }
   });
 

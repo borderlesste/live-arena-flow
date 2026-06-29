@@ -1,5 +1,6 @@
 import type { StreamSource } from "@/types";
 import { publicEnv } from "@/config/env";
+import type { CreateLiveSourceResponse, LiveSourceStatus } from "@/schemas/live-source.schema";
 
 const API_BASE = publicEnv.NEXT_PUBLIC_API_BASE_URL;
 
@@ -17,7 +18,7 @@ export interface ManagedVideoSource extends StreamSource {
   ingestUrl?: string;
   streamKeyLast4?: string;
   hasStreamKey?: boolean;
-  status?: "provisioning" | "ready" | "connecting" | "live" | "disconnected" | "disabled" | "error";
+  status?: LiveSourceStatus;
   statusMessage?: string;
   isEnabled?: boolean;
   isPrimary?: boolean;
@@ -81,7 +82,7 @@ export function listManagedVideoSources(token: string): Promise<ManagedVideoSour
 export function createLiveSource(
   payload: CreateLiveSourcePayload,
   token: string,
-): Promise<ManagedVideoSource> {
+): Promise<CreateLiveSourceResponse<ManagedVideoSource>> {
   return fetch(`${API_BASE}/admin/live-sources`, {
     method: "POST",
     headers: {
@@ -90,7 +91,7 @@ export function createLiveSource(
       "Idempotency-Key": payload.idempotencyKey,
     },
     body: JSON.stringify(payload),
-  }).then(parseResponse<ManagedVideoSource>);
+  }).then(parseResponse<CreateLiveSourceResponse<ManagedVideoSource>>);
 }
 
 /**
@@ -123,10 +124,11 @@ export async function saveManagedVideoSource(
     ? `${API_BASE}/admin/live-sources/${encodeURIComponent(source.id)}`
     : `${API_BASE}/admin/live-sources`;
 
+  const { id: _id, ...requestBody } = source;
   await fetch(url, {
     method: isEdit ? "PATCH" : "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(source),
+    body: JSON.stringify(requestBody),
   }).then(parseResponse<unknown>);
 
   return listManagedVideoSources(token);

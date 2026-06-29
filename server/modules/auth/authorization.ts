@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { IncomingMessage } from "node:http";
+import { selectSupabasePublicKey } from "./supabase-key.js";
 
 export type AppRole = "super_admin" | "admin" | "moderator" | "user";
 
@@ -9,7 +10,7 @@ export function bearerToken(request: IncomingMessage): string | undefined {
 
 export async function hasSupabaseRole(request: IncomingMessage, allowedRoles: AppRole[]): Promise<boolean> {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const anonKey = selectSupabasePublicKey();
   const token = bearerToken(request);
   if (!url || !anonKey || !token) return false;
 

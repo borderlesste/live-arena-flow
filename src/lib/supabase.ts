@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPublicSupabaseConfigured, publicEnv } from "@/config/env";
 
 const supabaseUrl = publicEnv.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabasePublishableKey = publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export const isSupabaseConfigured = isPublicSupabaseConfigured;
 
@@ -12,7 +12,7 @@ export function getSupabaseClient(): Promise<SupabaseClient> {
   if (!isSupabaseConfigured) {
     return Promise.reject(new Error("Supabase no está configurado en este entorno"));
   }
-  clientPromise ??= import("@supabase/supabase-js").then(({ createClient }) => createClient(supabaseUrl!, supabaseAnonKey!, {
+  clientPromise ??= import("@supabase/supabase-js").then(({ createClient }) => createClient(supabaseUrl!, supabasePublishableKey!, {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,

@@ -6,12 +6,21 @@ import { z } from "zod";
 import { readStore, updateStore, type StoreData, type StoredUser, type StoredVideoSource } from "./store.js";
 import { createSportsProvider, sportsProviderDiagnostics } from "./modules/sports/index.js";
 import { hasSupabaseRole } from "./modules/auth/authorization.js";
+import { selectSupabasePublicKey } from "./modules/auth/supabase-key.js";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { StreamSource } from "../src/types/index.js";
 import { embedUrlSchema, mediaUrlSchema } from "../src/schemas/stream.schema.js";
 import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.schema.js";
 import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorLegacyColumns, sponsorToLegacyRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
 import { getLiveStreamProvider } from "./modules/streaming/index.js";
+import { CloudflareStreamProvider } from "./modules/streaming/cloudflare.provider.js";
+import { buildWebhookEventKey, mapCloudflareEventToStatus, validateWebhookSecret } from "./modules/streaming/webhook.js";
+import {
+  cloudflareLiveWebhookSchema,
+  createLiveSourceSchema,
+  updateLiveSourceSchema,
+  type LiveSourceStatus,
+} from "../src/schemas/live-source.schema.js";
 
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -36,8 +45,8 @@ interface StreamMetricAggregation {
 if (process.env.NODE_ENV === "production" && STREAM_SECRET_KEY.length < 32) {
   throw new Error("STREAM_SECRET_KEY must contain at least 32 characters in production");
 }
-if (process.env.NODE_ENV === "production" && (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) || !(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY))) {
-  throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required in production");
+if (process.env.NODE_ENV === "production" && (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) || !selectSupabasePublicKey())) {
+  throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in production");
 }
 
 // Validate Cloudflare Stream config when that provider is selected
@@ -51,6 +60,9 @@ if ((process.env.STREAM_PROVIDER || "custom").toLowerCase() === "cloudflare") {
   }
   if (!process.env.CLOUDFLARE_STREAM_CUSTOMER_CODE?.trim()) {
     console.warn("[startup] CLOUDFLARE_STREAM_CUSTOMER_CODE is not set — HLS playback URLs cannot be generated until it is configured.");
+  }
+  if (process.env.NODE_ENV === "production" && (process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET?.trim().length ?? 0) < 32) {
+    throw new Error("[startup] CLOUDFLARE_STREAM_WEBHOOK_SECRET must contain at least 32 characters in production");
   }
 }
 
@@ -192,8 +204,8 @@ function setCors(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin;
   if (origin === APP_ORIGIN) response.setHeader("Access-Control-Allow-Origin", origin);
   response.setHeader("Vary", "Origin");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key");
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "no-referrer");
@@ -216,8 +228,8 @@ function decryptSecret(value: string): string {
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(cipherText), decipher.final()]);
     return decrypted.toString("utf8");
-  } catch (err) {
-    console.error("Decryption failed:", err);
+  } catch {
+    console.error("Decryption failed");
     return value;
   }
 }
@@ -227,8 +239,8 @@ async function logAudit(
   action: string,
   entityId: string,
   result: "success" | "denied" | "failure",
-  before?: any,
-  after?: any
+  before?: unknown,
+  after?: unknown,
 ) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
   let actorId: string | null = null;
@@ -254,33 +266,78 @@ async function logAudit(
         action,
         entity_type: "live_sources",
         entity_id: entityId.match(/^[0-9a-fA-F-]{36}$/) ? entityId : null,
-        before_value: before || null,
-        after_value: after || null,
+        before_value: redactSensitive(before),
+        after_value: redactSensitive(after),
         result,
         user_agent_summary: userAgent.slice(0, 255) || null,
         ip_hash: createHash("sha256").update(ip).digest("hex").slice(0, 64),
       });
-    } catch (err) {
-      console.error("Failed to write audit log:", err);
+    } catch {
+      console.error("Failed to write audit log");
     }
   } else {
     console.info(`[AUDIT] Action: ${action}, Actor: ${actorId || "unknown"}, Entity: ${entityId}, Result: ${result}`);
   }
 }
 
-function liveSourceFromRow(row: any): StoredVideoSource {
+function redactSensitive(value: unknown): unknown {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  if (typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !/(stream.?key|authorization|api.?token|secret|ciphertext|stream.?key.?iv)/i.test(key))
+      .map(([key, entry]) => [key, redactSensitive(entry)]),
+  );
+}
+
+interface LiveSourceRow {
+  id: string;
+  event_id: string;
+  name: string;
+  source_kind: "manual" | "obs";
+  usage_type: "live" | "highlight" | "prerecorded";
+  playback_format: string;
+  playback_url: string | null;
+  playback_url_verified?: boolean;
+  provider: string;
+  provider_input_id: string | null;
+  ingest_protocol: "rtmp" | "rtmps" | "srt" | null;
+  ingest_url: string | null;
+  stream_key_ciphertext: string | null;
+  stream_key_iv: string | null;
+  stream_key_last4: string | null;
+  credentials_version: number;
+  status: LiveSourceStatus;
+  status_message: string | null;
+  is_enabled: boolean;
+  is_primary: boolean;
+  recording_enabled: boolean;
+  low_latency_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_connected_at: string | null;
+  last_disconnected_at: string | null;
+  idempotency_key?: string | null;
+  idempotency_fingerprint?: string | null;
+}
+
+function liveSourceFromRow(row: LiveSourceRow): StoredVideoSource {
   return {
     id: row.id,
     matchId: row.event_id,
     title: row.name,
     sourceKind: row.source_kind as "manual" | "obs",
     usageType: row.usage_type as "live" | "highlight" | "prerecorded",
-    type: (row.source_kind === "obs" ? "obs_hls" : row.playback_format) as any,
-    url: row.source_kind === "obs" ? undefined : row.playback_url,
-    embedUrl: (["youtube", "youtube_live", "embed", "iframe"].includes(row.playback_format) ? row.playback_url : undefined),
+    type: (row.source_kind === "obs" ? "obs_hls" : row.playback_format) as StoredVideoSource["type"],
+    url: row.source_kind === "obs" ? undefined : row.playback_url ?? undefined,
+    embedUrl: (["youtube", "youtube_live", "embed", "iframe"].includes(row.playback_format) ? row.playback_url ?? undefined : undefined),
     isExternal: ["youtube", "youtube_live", "embed", "iframe"].includes(row.playback_format),
     purpose: row.usage_type === "highlight" ? "highlight" : "live",
     provider: row.provider,
+    playbackUrl: row.playback_url ?? undefined,
+    playbackFormat: row.playback_format,
+    playbackUrlVerified: row.playback_url_verified === true,
     providerInputId: row.provider_input_id ?? undefined,
     ingestProtocol: row.ingest_protocol ?? undefined,
     ingestUrl: row.ingest_url ?? undefined,
@@ -298,10 +355,12 @@ function liveSourceFromRow(row: any): StoredVideoSource {
     updatedAt: row.updated_at,
     lastConnectedAt: row.last_connected_at ?? undefined,
     lastDisconnectedAt: row.last_disconnected_at ?? undefined,
-    obs: row.source_kind === "obs" ? {
+    idempotencyKey: row.idempotency_key ?? undefined,
+    idempotencyFingerprint: row.idempotency_fingerprint ?? undefined,
+    obs: row.source_kind === "obs" && row.ingest_protocol && row.ingest_url ? {
       protocol: row.ingest_protocol,
       serverUrl: row.ingest_url,
-      streamKey: row.stream_key_ciphertext, // Store full ciphertext, revealSecret will decrypt it
+      streamKey: row.stream_key_ciphertext ?? undefined, // Store full ciphertext, revealSecret will decrypt it
     } : undefined,
   };
 }
@@ -317,6 +376,7 @@ function liveSourceToRow(source: StoredVideoSource) {
     usage_type: source.usageType || (source.purpose === "highlight" ? "highlight" : "live"),
     playback_format: playbackFormat,
     playback_url: playbackUrl,
+    playback_url_verified: source.playbackUrlVerified === true,
     provider: source.provider || "custom",
     provider_input_id: source.providerInputId || null,
     ingest_protocol: source.ingestProtocol || null,
@@ -336,13 +396,15 @@ function liveSourceToRow(source: StoredVideoSource) {
     last_connected_at: source.lastConnectedAt || null,
     last_disconnected_at: source.lastDisconnectedAt || null,
     deleted_at: null,
+    idempotency_key: source.idempotencyKey || null,
+    idempotency_fingerprint: source.idempotencyFingerprint || null,
   };
 }
 
 function supabaseAuthConfigured() {
   return Boolean(
     (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
-    (process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY),
+    selectSupabasePublicKey(),
   );
 }
 
@@ -369,20 +431,42 @@ async function isAdmin(request: IncomingMessage): Promise<boolean> {
   return hasSupabaseRole(request, ["super_admin", "admin"]);
 }
 
+class RequestBodyError extends Error {
+  constructor(readonly status: 400 | 413, message: string) {
+    super(message);
+  }
+}
+
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1_000_000) throw new Error("PAYLOAD_TOO_LARGE");
+    if (size > 1_000_000) throw new RequestBodyError(413, "PAYLOAD_TOO_LARGE");
     chunks.push(chunk);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  } catch {
+    throw new RequestBodyError(400, "INVALID_JSON");
+  }
+}
+
+function hasSafePlayback(source: StoredVideoSource): boolean {
+  if (source.sourceKind !== "obs") return true;
+  if (!source.playbackUrl) return false;
+  try {
+    const url = new URL(source.playbackUrl);
+    if (url.protocol !== "https:") return false;
+  } catch {
+    return false;
+  }
+  return source.provider !== "custom" || source.playbackUrlVerified === true;
 }
 
 function publicVideoSources(sources: StoredVideoSource[]) {
   return sources
-    .filter((source) => source.isEnabled !== false)
+    .filter((source) => source.isEnabled !== false && hasSafePlayback(source))
     .map(({ obs: _obs, streamKeyCiphertext: _cipher, streamKeyIv: _iv, ...source }) => {
       if (source.sourceKind === "obs") {
         return {
@@ -402,11 +486,29 @@ function publicVideoSources(sources: StoredVideoSource[]) {
 }
 
 function managedVideoSources(sources: StoredVideoSource[]) {
-  return sources.map((source) => ({
-    ...source,
-    obs: source.obs ? { ...source.obs, streamKey: undefined, hasStreamKey: Boolean(source.obs.streamKey || source.streamKeyCiphertext) } : undefined,
-    hasStreamKey: Boolean(source.streamKeyCiphertext || source.obs?.streamKey),
-  }));
+  return sources.map(sanitizeManagedSource);
+}
+
+function sanitizeManagedSource(source: StoredVideoSource) {
+  const {
+    streamKeyCiphertext: _ciphertext,
+    streamKeyIv: _streamKeyIv,
+    idempotencyKey: _idempotencyKey,
+    idempotencyFingerprint: _idempotencyFingerprint,
+    ...safe
+  } = source;
+  const hasStreamKey = Boolean(source.streamKeyCiphertext || source.obs?.streamKey || source.provider === "cloudflare_stream");
+  return {
+    ...safe,
+    obs: source.obs ? { ...source.obs, streamKey: undefined, hasStreamKey } : undefined,
+    hasStreamKey,
+  };
+}
+
+function providerForSource(source: StoredVideoSource) {
+  return source.provider === "cloudflare_stream"
+    ? new CloudflareStreamProvider()
+    : getLiveStreamProvider();
 }
 
 function publicStreams(sources: StreamSource[]) {
@@ -597,8 +699,8 @@ async function getAdminLiveSources(): Promise<StoredVideoSource[]> {
 
 function getAnonSupabaseClient() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required");
+  const key = selectSupabasePublicKey();
+  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required");
   return createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
@@ -860,23 +962,14 @@ const server = createServer(async (request, response) => {
           if (isTableMissing) {
             console.warn("[live-sources] Tabla live_sources no encontrada en Supabase. Usando store local. Ejecuta la migración: supabase/migrations/20260625200000_live_sources.sql");
             const store = await readStore();
-            return json(response, 200, store.videoSources.map((src) => {
-              if (src.obs) src.obs.streamKey = undefined;
-              return { ...src, hasStreamKey: Boolean(src.obs?.streamKey || src.streamKeyCiphertext) };
-            }));
+            return json(response, 200, managedVideoSources(store.videoSources));
           }
           return json(response, 500, { error: error.message });
         }
-        return json(response, 200, data.map(liveSourceFromRow).map((src) => {
-          if (src.obs) src.obs.streamKey = undefined;
-          return { ...src, hasStreamKey: Boolean(src.streamKeyCiphertext) };
-        }));
+        return json(response, 200, managedVideoSources(data.map((row) => liveSourceFromRow(row as LiveSourceRow))));
       } else {
         const store = await readStore();
-        return json(response, 200, store.videoSources.map((src) => {
-          if (src.obs) src.obs.streamKey = undefined;
-          return { ...src, hasStreamKey: Boolean(src.obs?.streamKey || src.streamKeyCiphertext) };
-        }));
+        return json(response, 200, managedVideoSources(store.videoSources));
       }
     }
 
@@ -906,14 +999,13 @@ const server = createServer(async (request, response) => {
       }
 
       const obsSources = sourcesList.filter((s) => s.sourceKind === "obs" && s.providerInputId);
-      const provider = getLiveStreamProvider();
-      
       const statusPromises = obsSources.map(async (src) => {
         try {
+          const provider = providerForSource(src);
           const status = await provider.getLiveInputStatus(src.providerInputId!);
           return { id: src.id, status };
         } catch {
-          return { id: src.id, status: "error" as const };
+          return { id: src.id, status: "provider_error" as const };
         }
       });
       
@@ -970,10 +1062,10 @@ const server = createServer(async (request, response) => {
       let ingestProtocol: "rtmp" | "rtmps" | "srt" = (currentSource.ingestProtocol as "rtmps") || "rtmps";
 
       // For Cloudflare provider: fetch credentials from Cloudflare API (preferred — no local plaintext storage)
-      const provider = getLiveStreamProvider();
+      const provider = providerForSource(currentSource);
       if (currentSource.provider === "cloudflare_stream" && currentSource.providerInputId && "getCredentials" in provider) {
         try {
-          const creds = await (provider as import("./modules/streaming/cloudflare.provider.js").CloudflareStreamProvider).getCredentials(currentSource.providerInputId);
+          const creds = await (provider as CloudflareStreamProvider).getCredentials(currentSource.providerInputId);
           streamKey = creds.streamKey;
           ingestUrl = creds.ingestUrl;
           ingestProtocol = creds.ingestProtocol;
@@ -1023,40 +1115,90 @@ const server = createServer(async (request, response) => {
 
       const before = { ...currentSource };
       try {
-        const provider = getLiveStreamProvider();
-        if (!provider.rotateCredentials) return json(response, 501, { error: "No soportado por el proveedor" });
-        const rotated = await provider.rotateCredentials(currentSource.providerInputId);
+        const provider = providerForSource(currentSource);
+        const previousProviderInputId = currentSource.providerInputId;
+        const replacement = currentSource.provider === "cloudflare_stream"
+          ? await provider.createLiveInput({
+              name: currentSource.title,
+              recordingEnabled: currentSource.recordingEnabled,
+              lowLatencyEnabled: currentSource.lowLatencyEnabled,
+            })
+          : provider.rotateCredentials
+            ? { ...(await provider.rotateCredentials(previousProviderInputId)), providerInputId: previousProviderInputId, playbackUrl: currentSource.playbackUrl }
+            : null;
+        if (!replacement) return json(response, 501, { error: "No soportado por el proveedor" });
 
-        currentSource.ingestUrl = rotated.ingestUrl;
-        currentSource.streamKeyLast4 = rotated.streamKey.slice(-4);
-        currentSource.streamKeyCiphertext = protectSecret(rotated.streamKey);
-        if (currentSource.streamKeyCiphertext.startsWith("v1:")) {
-          const parts = currentSource.streamKeyCiphertext.split(":");
-          currentSource.streamKeyIv = parts[1];
+        const isReplacement = currentSource.provider === "cloudflare_stream";
+        const nextVersion = (currentSource.credentialsVersion || 1) + 1;
+        if (isReplacement && canUseAdminSupabase()) {
+          const { data: replaced, error } = await getAdminSupabaseClient().rpc("replace_live_source_input", {
+            p_source_id: id,
+            p_expected_provider_input_id: previousProviderInputId,
+            p_new_provider_input_id: replacement.providerInputId,
+            p_new_ingest_url: replacement.ingestUrl,
+            p_new_playback_url: replacement.playbackUrl,
+            p_new_stream_key_last4: replacement.streamKey.slice(-4),
+            p_new_credentials_version: nextVersion,
+          });
+          if (error || replaced !== true) {
+            try { await provider.deleteLiveInput(replacement.providerInputId); } catch {
+              await getAdminSupabaseClient().from("live_source_provider_cleanup_jobs").insert({
+                source_id: id,
+                provider: currentSource.provider,
+                provider_input_id: replacement.providerInputId,
+                reason: "create_compensation_failed",
+              });
+            }
+            throw new Error("LIVE_INPUT_REPLACEMENT_PERSIST_FAILED");
+          }
         }
+
+        currentSource.providerInputId = replacement.providerInputId;
+        currentSource.ingestUrl = replacement.ingestUrl;
+        currentSource.playbackUrl = replacement.playbackUrl || undefined;
+        currentSource.playbackUrlVerified = isReplacement ? Boolean(replacement.playbackUrl) : currentSource.playbackUrlVerified;
+        currentSource.streamKeyLast4 = replacement.streamKey.slice(-4);
+        currentSource.streamKeyCiphertext = isReplacement ? undefined : protectSecret(replacement.streamKey);
+        currentSource.streamKeyIv = currentSource.streamKeyCiphertext?.startsWith("v1:")
+          ? currentSource.streamKeyCiphertext.split(":")[1]
+          : undefined;
         currentSource.credentialsVersion = (currentSource.credentialsVersion || 1) + 1;
+        currentSource.status = "waiting_signal";
         currentSource.updatedAt = new Date().toISOString();
 
-        if (canUseAdminSupabase()) {
+        if (canUseAdminSupabase() && !isReplacement) {
           const row = liveSourceToRow(currentSource);
           const { error } = await getAdminSupabaseClient().from("live_sources").update(row).eq("id", id);
           if (error) throw error;
-        } else {
+        } else if (!canUseAdminSupabase()) {
           await updateStore((store) => {
             const index = store.videoSources.findIndex((s) => s.id === id);
             if (index >= 0) store.videoSources[index] = currentSource!;
           });
         }
 
+        if (isReplacement) {
+          try {
+            await provider.deleteLiveInput(previousProviderInputId);
+            if (canUseAdminSupabase()) {
+              await getAdminSupabaseClient().from("live_source_provider_cleanup_jobs")
+                .update({ status: "completed", updated_at: new Date().toISOString() })
+                .eq("provider_input_id", previousProviderInputId)
+                .eq("reason", "rotation");
+            }
+          } catch {
+            // The transactional cleanup job created above remains pending.
+          }
+        }
+
         await logAudit(request, "rotate_credentials", id, "success", before, currentSource);
         return json(response, 200, {
           ingestUrl: currentSource.ingestUrl,
           ingestProtocol: currentSource.ingestProtocol,
-          streamKey: rotated.streamKey,
+          streamKey: replacement.streamKey,
         });
-      } catch (err) {
-        console.error("Rotate error:", err);
-        await logAudit(request, "rotate_credentials", id, "failure", before, { error: (err as Error).message });
+      } catch {
+        await logAudit(request, "rotate_credentials", id, "failure", before, { code: "ROTATION_FAILED" });
         return json(response, 500, { error: "Error al rotar credenciales" });
       }
     }
@@ -1086,17 +1228,23 @@ const server = createServer(async (request, response) => {
       if (!currentSource) return json(response, 404, { error: "Fuente no encontrada" });
 
       const before = { ...currentSource };
-      currentSource.isEnabled = enable;
-      currentSource.updatedAt = new Date().toISOString();
-
       if (currentSource.sourceKind === "obs" && currentSource.providerInputId) {
-        const provider = getLiveStreamProvider();
-        if (enable) await provider.enableLiveInput(currentSource.providerInputId);
-        else await provider.disableLiveInput(currentSource.providerInputId);
+        try {
+          const provider = providerForSource(currentSource);
+          if (enable) await provider.enableLiveInput(currentSource.providerInputId);
+          else await provider.disableLiveInput(currentSource.providerInputId);
+        } catch {
+          await logAudit(request, `${action}_live_source`, id, "failure", before, { code: "PROVIDER_UPDATE_FAILED" });
+          return json(response, 502, { error: "No se pudo actualizar la entrada en el proveedor" });
+        }
       }
 
+      currentSource.isEnabled = enable;
+      currentSource.status = enable ? "waiting_signal" : "disabled";
+      currentSource.updatedAt = new Date().toISOString();
+
       if (canUseAdminSupabase()) {
-        const { error } = await getAdminSupabaseClient().from("live_sources").update({ is_enabled: enable, updated_at: currentSource.updatedAt }).eq("id", id);
+        const { error } = await getAdminSupabaseClient().from("live_sources").update({ is_enabled: enable, status: currentSource.status, updated_at: currentSource.updatedAt }).eq("id", id);
         if (error) return json(response, 500, { error: error.message });
       } else {
         await updateStore((store) => {
@@ -1111,114 +1259,173 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/admin/live-sources") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const body = await readBody(request) as any;
-
-      // ── Idempotency guard ──────────────────────────────────────────────────
-      // If the client sends an Idempotency-Key header, check whether we already
-      // processed this exact request to prevent duplicate entries from double-click.
-      const idempotencyKey = (request.headers["idempotency-key"] as string | undefined)?.trim();
-      if (idempotencyKey && canUseAdminSupabase()) {
-        const { data: existing } = await getAdminSupabaseClient()
-          .from("live_sources")
-          .select("id, name, source_kind, ingest_url, stream_key_last4, playback_url, status, ingest_protocol")
-          .eq("idempotency_key", idempotencyKey)
-          .is("deleted_at", null)
-          .maybeSingle();
-        if (existing) {
-          // Return the already-created source (without stream key — use /reveal)
-          const src = liveSourceFromRow(existing);
-          return json(response, 200, { ...src, hasStreamKey: Boolean((existing as any).stream_key_ciphertext) });
-        }
-      }
-
+      const body = createLiveSourceSchema.parse(await readBody(request));
+      const idempotencyKey = z.string().uuid().parse(request.headers["idempotency-key"]);
+      const fingerprint = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+      const id = crypto.randomUUID();
       const isObs = body.sourceKind === "obs";
-      const id = body.id || crypto.randomUUID();
-      
       const newSource: StoredVideoSource = {
         id,
         matchId: body.matchId,
-        title: body.title?.trim() || "Transmisión",
+        title: body.title,
         sourceKind: isObs ? "obs" : "manual",
-        usageType: body.usageType || "live",
-        type: isObs ? "obs_hls" : body.playbackFormat || "hls",
+        usageType: body.usageType,
+        type: isObs ? "obs_hls" : (body.playbackFormat || "hls") as StoredVideoSource["type"],
         isEnabled: body.isEnabled !== false,
         isPrimary: body.isPrimary === true,
         recordingEnabled: body.recordingEnabled === true,
         lowLatencyEnabled: body.lowLatencyEnabled === true,
+        status: isObs ? "provisioning" : "ready",
+        idempotencyKey,
+        idempotencyFingerprint: fingerprint,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      let rawStreamKey: string | undefined;
-
       if (newSource.sourceKind === "manual") {
-        if (!body.playbackUrl) return json(response, 400, { error: "URL de reproducción requerida" });
-        newSource.playbackUrl = body.playbackUrl;
+        newSource.playbackUrl = body.playbackUrl!;
+        newSource.playbackUrlVerified = true;
         newSource.playbackFormat = body.playbackFormat || "hls";
-        newSource.url = body.playbackUrl;
+        newSource.url = body.playbackUrl!;
         newSource.isExternal = ["youtube", "youtube_live", "embed", "iframe"].includes(newSource.type);
-        if (newSource.isExternal) newSource.embedUrl = body.playbackUrl;
-      } else {
-        try {
-          const provider = getLiveStreamProvider();
-          const liveInput = await provider.createLiveInput({
-            name: newSource.title,
-            recordingEnabled: newSource.recordingEnabled,
-            lowLatencyEnabled: newSource.lowLatencyEnabled,
-          });
+        if (newSource.isExternal) newSource.embedUrl = body.playbackUrl!;
+      }
 
-          newSource.provider = liveInput.provider;
-          newSource.providerInputId = liveInput.providerInputId;
-          newSource.ingestProtocol = liveInput.ingestProtocol;
-          newSource.ingestUrl = liveInput.ingestUrl;
-          newSource.playbackUrl = liveInput.playbackUrl || undefined;
-          newSource.playbackFormat = liveInput.playbackFormat;
-          newSource.status = liveInput.status;
-
-          if (liveInput.streamKey) {
-            rawStreamKey = liveInput.streamKey;
-            newSource.streamKeyLast4 = liveInput.streamKey.slice(-4);
-            newSource.streamKeyCiphertext = protectSecret(liveInput.streamKey);
-            if (newSource.streamKeyCiphertext.startsWith("v1:")) {
-              newSource.streamKeyIv = newSource.streamKeyCiphertext.split(":")[1];
-            }
+      if (canUseAdminSupabase()) {
+        const supa = getAdminSupabaseClient();
+        const { data: existing } = await supa
+          .from("live_sources")
+          .select("*")
+          .eq("idempotency_key", idempotencyKey)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (existing) {
+          if (existing.idempotency_fingerprint && existing.idempotency_fingerprint !== fingerprint) {
+            return json(response, 409, { error: "La clave idempotente ya pertenece a otra solicitud" });
           }
-        } catch (providerError) {
-          console.error("Provider failed:", providerError);
-          return json(response, 500, { error: "Error al crear señal en el proveedor" });
+          return json(response, 200, {
+            source: sanitizeManagedSource(liveSourceFromRow(existing as LiveSourceRow)),
+            replayed: true,
+          });
         }
+
+        const { error: insertError } = await supa.from("live_sources").insert(liveSourceToRow(newSource));
+        if (insertError) {
+          if (insertError.code === "23505") {
+            const { data: raced } = await supa.from("live_sources").select("*").eq("idempotency_key", idempotencyKey).maybeSingle();
+            if (raced?.idempotency_fingerprint === fingerprint) {
+              return json(response, 200, {
+                source: sanitizeManagedSource(liveSourceFromRow(raced as LiveSourceRow)),
+                replayed: true,
+              });
+            }
+            return json(response, 409, { error: "Conflicto de idempotencia" });
+          }
+          throw insertError;
+        }
+      } else {
+        const reservation = await updateStore((data) => {
+          if (!data.videoSources.some((source) => source.idempotencyKey === idempotencyKey)) {
+            data.videoSources.push(newSource);
+          }
+        });
+        const reserved = reservation.videoSources.find((source) => source.idempotencyKey === idempotencyKey)!;
+        if (reserved.id !== id) {
+          if (reserved.idempotencyFingerprint !== fingerprint) return json(response, 409, { error: "Conflicto de idempotencia" });
+          return json(response, 200, { source: sanitizeManagedSource(reserved), replayed: true });
+        }
+      }
+
+      if (!isObs) {
+        await logAudit(request, "create_live_source", id, "success", null, newSource);
+        return json(response, 201, { source: sanitizeManagedSource(newSource), replayed: false });
+      }
+
+      const provider = getLiveStreamProvider();
+      let liveInput: Awaited<ReturnType<typeof provider.createLiveInput>>;
+      try {
+        liveInput = await provider.createLiveInput({
+          name: newSource.title,
+          recordingEnabled: newSource.recordingEnabled,
+          lowLatencyEnabled: newSource.lowLatencyEnabled,
+        });
+      } catch {
+        if (canUseAdminSupabase()) {
+          await getAdminSupabaseClient().from("live_sources").update({
+            status: "provider_error",
+            provider_error_code: "LIVE_INPUT_CREATE_FAILED",
+          }).eq("id", id);
+        } else {
+          await updateStore((data) => {
+            const source = data.videoSources.find((item) => item.id === id);
+            if (source) {
+              source.status = "provider_error";
+              source.statusMessage = "LIVE_INPUT_CREATE_FAILED";
+            }
+          });
+        }
+        await logAudit(request, "create_live_source", id, "failure", null, { code: "LIVE_INPUT_CREATE_FAILED" });
+        return json(response, 502, { error: "No fue posible crear la entrada de transmisión" });
+      }
+
+      newSource.provider = liveInput.provider;
+      newSource.providerInputId = liveInput.providerInputId;
+      newSource.ingestProtocol = liveInput.ingestProtocol;
+      newSource.ingestUrl = liveInput.ingestUrl;
+      newSource.playbackUrl = liveInput.playbackUrl || undefined;
+      newSource.playbackUrlVerified = liveInput.provider === "cloudflare_stream" && Boolean(liveInput.playbackUrl);
+      newSource.playbackFormat = liveInput.playbackFormat;
+      newSource.status = "waiting_signal";
+      newSource.streamKeyLast4 = liveInput.streamKey.slice(-4);
+      if (liveInput.provider !== "cloudflare_stream") {
+        newSource.streamKeyCiphertext = protectSecret(liveInput.streamKey);
+        if (newSource.streamKeyCiphertext.startsWith("v1:")) newSource.streamKeyIv = newSource.streamKeyCiphertext.split(":")[1];
       }
 
       try {
         if (canUseAdminSupabase()) {
           const row = liveSourceToRow(newSource);
-          // Store idempotency key to prevent duplicate submissions
-          if (idempotencyKey) (row as any).idempotency_key = idempotencyKey;
-          const { error } = await getAdminSupabaseClient().from("live_sources").insert(row);
+          const { error } = await getAdminSupabaseClient().from("live_sources").update(row).eq("id", id).eq("status", "provisioning");
           if (error) throw error;
         } else {
-          await updateStore((store) => {
-            store.videoSources.push(newSource);
+          await updateStore((data) => {
+            const index = data.videoSources.findIndex((item) => item.id === id);
+            if (index >= 0) data.videoSources[index] = newSource;
           });
         }
-        await logAudit(request, "create_live_source", id, "success", null, newSource);
-      } catch (dbError) {
-        if (newSource.sourceKind === "obs" && newSource.providerInputId) {
-          try {
-            await getLiveStreamProvider().deleteLiveInput(newSource.providerInputId);
-          } catch (compErr) {
-            console.error("Compensate failed:", compErr);
+      } catch {
+        try {
+          await provider.deleteLiveInput(liveInput.providerInputId);
+        } catch {
+          if (canUseAdminSupabase()) {
+            await getAdminSupabaseClient().from("live_source_provider_cleanup_jobs").insert({
+              source_id: id,
+              provider: liveInput.provider,
+              provider_input_id: liveInput.providerInputId,
+              reason: "create_compensation_failed",
+            });
           }
         }
-        await logAudit(request, "create_live_source", id, "failure", null, { error: (dbError as Error).message });
-        return json(response, 500, { error: "Error al guardar en base de datos" });
+        if (canUseAdminSupabase()) {
+          await getAdminSupabaseClient().from("live_sources").update({
+            status: "provider_error",
+            provider_error_code: "LOCAL_PERSIST_FAILED",
+          }).eq("id", id);
+        }
+        await logAudit(request, "create_live_source", id, "failure", null, { code: "LOCAL_PERSIST_FAILED" });
+        return json(response, 500, { error: "Error al guardar la fuente" });
       }
 
-      const returnedSource = { ...newSource, hasStreamKey: Boolean(rawStreamKey) };
-      if (rawStreamKey && returnedSource.obs) {
-        returnedSource.obs = { ...returnedSource.obs, streamKey: rawStreamKey };
-      }
-      return json(response, 200, returnedSource);
+      await logAudit(request, "create_live_source", id, "success", null, newSource);
+      return json(response, 201, {
+        source: sanitizeManagedSource(newSource),
+        credentials: {
+          ingestUrl: liveInput.ingestUrl,
+          ingestProtocol: liveInput.ingestProtocol,
+          streamKey: liveInput.streamKey,
+        },
+        replayed: false,
+      });
     }
 
     const liveSourceDetailMatch = url.pathname.match(/^\/api\/admin\/live-sources\/([^/]+)$/);
@@ -1234,22 +1441,19 @@ const server = createServer(async (request, response) => {
           .maybeSingle();
         if (error) return json(response, 500, { error: error.message });
         if (!data) return json(response, 404, { error: "Fuente no encontrada" });
-        const src = liveSourceFromRow(data);
-        if (src.obs) src.obs.streamKey = undefined;
-        return json(response, 200, { ...src, hasStreamKey: Boolean(src.streamKeyCiphertext) });
+        return json(response, 200, sanitizeManagedSource(liveSourceFromRow(data as LiveSourceRow)));
       } else {
         const store = await readStore();
         const src = store.videoSources.find((s) => s.id === id);
         if (!src) return json(response, 404, { error: "Fuente no encontrada" });
-        if (src.obs) src.obs.streamKey = undefined;
-        return json(response, 200, { ...src, hasStreamKey: Boolean(src.obs?.streamKey || src.streamKeyCiphertext) });
+        return json(response, 200, sanitizeManagedSource(src));
       }
     }
 
     if (request.method === "PATCH" && liveSourceDetailMatch) {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       const id = liveSourceDetailMatch[1];
-      const body = await readBody(request) as any;
+      const body = updateLiveSourceSchema.parse(await readBody(request));
 
       let currentSource: StoredVideoSource | undefined;
       if (canUseAdminSupabase()) {
@@ -1272,7 +1476,6 @@ const server = createServer(async (request, response) => {
       if (body.title !== undefined) currentSource.title = body.title.trim();
       if (body.matchId !== undefined) currentSource.matchId = body.matchId;
       if (body.isPrimary !== undefined) currentSource.isPrimary = body.isPrimary === true;
-      if (body.isEnabled !== undefined) currentSource.isEnabled = body.isEnabled === true;
       if (body.lowLatencyEnabled !== undefined) currentSource.lowLatencyEnabled = body.lowLatencyEnabled === true;
       if (body.recordingEnabled !== undefined) currentSource.recordingEnabled = body.recordingEnabled === true;
       if (body.playbackUrl !== undefined && currentSource.sourceKind === "manual") {
@@ -1280,6 +1483,15 @@ const server = createServer(async (request, response) => {
         currentSource.url = body.playbackUrl;
         currentSource.isExternal = ["youtube", "youtube_live", "embed", "iframe"].includes(currentSource.type);
         if (currentSource.isExternal) currentSource.embedUrl = body.playbackUrl;
+      } else if (body.playbackUrl !== undefined && currentSource.sourceKind === "obs" && currentSource.provider === "custom") {
+        const parsedUrl = new URL(body.playbackUrl);
+        const storedKey = currentSource.streamKeyCiphertext || currentSource.obs?.streamKey;
+        const rawKey = storedKey ? decryptSecret(storedKey) : "";
+        if (parsedUrl.protocol !== "https:" || (rawKey && parsedUrl.pathname.includes(rawKey))) {
+          return json(response, 400, { error: "La reproducción custom exige una URL HTTPS independiente de la clave de publicación" });
+        }
+        currentSource.playbackUrl = body.playbackUrl;
+        currentSource.playbackUrlVerified = true;
       }
       currentSource.updatedAt = new Date().toISOString();
 
@@ -1308,7 +1520,7 @@ const server = createServer(async (request, response) => {
       }
 
       await logAudit(request, "update_live_source", id, "success", before, currentSource);
-      return json(response, 200, { ...currentSource, hasStreamKey: Boolean(currentSource.streamKeyCiphertext || currentSource.obs?.streamKey) });
+      return json(response, 200, sanitizeManagedSource(currentSource));
     }
 
     if (request.method === "DELETE" && liveSourceDetailMatch) {
@@ -1333,10 +1545,38 @@ const server = createServer(async (request, response) => {
       if (!currentSource) return json(response, 404, { error: "Fuente no encontrada" });
 
       if (currentSource.sourceKind === "obs" && currentSource.providerInputId) {
+        if (canUseAdminSupabase()) {
+          await getAdminSupabaseClient().from("live_sources").update({ status: "deletion_pending" }).eq("id", id);
+        } else {
+          await updateStore((store) => {
+            const source = store.videoSources.find((item) => item.id === id);
+            if (source) source.status = "deletion_pending";
+          });
+        }
         try {
-          await getLiveStreamProvider().deleteLiveInput(currentSource.providerInputId);
-        } catch (providerError) {
-          console.error("Provider failed to delete live input:", providerError);
+          await providerForSource(currentSource).deleteLiveInput(currentSource.providerInputId);
+        } catch {
+          if (canUseAdminSupabase()) {
+            const supa = getAdminSupabaseClient();
+            await supa.from("live_sources").update({
+              status: "deletion_failed",
+              provider_error_code: "LIVE_INPUT_DELETE_FAILED",
+            }).eq("id", id);
+            await supa.from("live_source_provider_cleanup_jobs").upsert({
+              source_id: id,
+              provider: currentSource.provider || "custom",
+              provider_input_id: currentSource.providerInputId,
+              reason: "delete_failed",
+              status: "pending",
+            }, { onConflict: "provider,provider_input_id,reason" });
+          } else {
+            await updateStore((store) => {
+              const source = store.videoSources.find((item) => item.id === id);
+              if (source) source.status = "deletion_failed";
+            });
+          }
+          await logAudit(request, "delete_live_source", id, "failure", currentSource, { code: "LIVE_INPUT_DELETE_FAILED" });
+          return json(response, 502, { error: "El proveedor no confirmó la eliminación; la fuente sigue visible para reintentar" });
         }
       }
 
@@ -1365,14 +1605,13 @@ const server = createServer(async (request, response) => {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       const stream = managedStreamSchema.parse(await readBody(request));
       const ingestBase = (process.env.STREAM_INGEST_URL || "").replace(/\/$/, "");
-      const playbackBase = (process.env.STREAM_PLAYBACK_BASE_URL || "").replace(/\/$/, "");
       let revealedKey: string | undefined;
       const data = await updateStore((store) => {
         const index = store.streams.findIndex((item) => item.id === stream.id);
         const previousSecret = index >= 0 ? store.streams[index].obs?.streamKey : undefined;
 
         // Prepare OBS config: generate stream key and set server/playback URLs for new streams
-        let obsConfig = stream.obs ? { ...stream.obs } : undefined;
+        const obsConfig = stream.obs ? { ...stream.obs } : undefined;
         if (obsConfig) {
           // If creating new stream and no streamKey provided, generate one
           if (index < 0 && !obsConfig.streamKey) {
@@ -1386,39 +1625,29 @@ const server = createServer(async (request, response) => {
         // Protect stream key for storage (or keep previous if none provided)
         const storedObs = obsConfig ? { ...obsConfig, streamKey: obsConfig.streamKey ? protectSecret(obsConfig.streamKey) : previousSecret } : undefined;
 
-        // If playback URL not provided, derive it from playback base and stream key (if available)
-        let storedStream = { ...stream, obs: storedObs } as StreamSource;
-        const rawStreamKey = obsConfig?.streamKey;
-        if (!storedStream.url && playbackBase && rawStreamKey) {
-          storedStream.url = `${playbackBase}/${rawStreamKey}/index.m3u8`;
-        }
+        const storedStream = { ...stream, obs: storedObs } as StreamSource;
 
         if (index >= 0) store.streams[index] = storedStream;
         else store.streams.push(storedStream);
       });
-      const responseStreams = managedStreams(data.streams);
-      // If we generated a new key, include it once for the created stream in the response (admin-only)
-      if (revealedKey) {
-        const idx = responseStreams.findIndex((s) => s.id === stream.id);
-        if (idx >= 0 && responseStreams[idx].obs) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (responseStreams[idx] as any).obs = { ...responseStreams[idx].obs, streamKey: revealedKey };
-        }
-      }
+      const responseStreams = managedStreams(data.streams).map((item) =>
+        revealedKey && item.id === stream.id && item.obs
+          ? { ...item, obs: { ...item.obs, streamKey: revealedKey } }
+          : item,
+      );
       return json(response, 200, responseStreams);
     }
     if (request.method === "PUT" && url.pathname === "/api/admin/video-sources") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       const source = videoSourceSchema.parse(await readBody(request)) as StoredVideoSource;
       const ingestBase = (process.env.STREAM_INGEST_URL || "").replace(/\/$/, "");
-      const playbackBase = (process.env.STREAM_PLAYBACK_BASE_URL || "").replace(/\/$/, "");
       let revealedKey: string | undefined;
       const data = await updateStore((store) => {
         const index = store.videoSources.findIndex((item) => item.id === source.id);
         const previousSecret = index >= 0 ? store.videoSources[index].obs?.streamKey : undefined;
 
         // Prepare OBS config: generate stream key and set server/playback URLs for new streams
-        let obsConfig = source.obs ? { ...source.obs } : undefined;
+        const obsConfig = source.obs ? { ...source.obs } : undefined;
         if (obsConfig) {
           // If creating new stream and no streamKey provided, generate one
           if (index < 0 && !obsConfig.streamKey) {
@@ -1432,25 +1661,16 @@ const server = createServer(async (request, response) => {
         // Protect stream key for storage (or keep previous if none provided)
         const storedObs = obsConfig ? { ...obsConfig, streamKey: obsConfig.streamKey ? protectSecret(obsConfig.streamKey) : previousSecret } : undefined;
 
-        // If playback URL not provided, derive it from playback base and stream key (if available)
-        let storedSource = { ...source, obs: storedObs } as StoredVideoSource;
-        const rawStreamKey = obsConfig?.streamKey;
-        if (!storedSource.url && playbackBase && rawStreamKey) {
-          storedSource.url = `${playbackBase}/${rawStreamKey}/index.m3u8`;
-        }
+        const storedSource = { ...source, obs: storedObs } as StoredVideoSource;
 
         if (index >= 0) store.videoSources[index] = storedSource;
         else store.videoSources.push(storedSource);
       });
-      const responseSources = managedVideoSources(data.videoSources);
-      // If we generated a new key, include it once for the created source in the response (admin-only)
-      if (revealedKey) {
-        const idx = responseSources.findIndex((s) => s.id === source.id);
-        if (idx >= 0 && responseSources[idx].obs) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (responseSources[idx] as any).obs = { ...responseSources[idx].obs, streamKey: revealedKey };
-        }
-      }
+      const responseSources = managedVideoSources(data.videoSources).map((item) =>
+        revealedKey && item.id === source.id && item.obs
+          ? { ...item, obs: { ...item.obs, streamKey: revealedKey } }
+          : item,
+      );
       return json(response, 200, responseSources);
     }
     const sourceMatch = url.pathname.match(/^\/api\/admin\/video-sources\/([^/]+)$/);
@@ -1475,11 +1695,6 @@ const server = createServer(async (request, response) => {
     if (request.method === "PUT" && url.pathname === "/api/admin/sponsors") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       const body = await readBody(request);
-      try {
-        console.log("PUT /api/admin/sponsors payload:", JSON.stringify(body));
-      } catch {
-        // ignore circular or non-serializable
-      }
       const sponsor = sponsorAdminSchema.parse(body);
       return json(response, 200, await saveManagedSponsorPayload(sponsor));
     }
@@ -1607,47 +1822,15 @@ const server = createServer(async (request, response) => {
       const webhookSecret = process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET?.trim();
       const cfAuth = request.headers["cf-webhook-auth"];
 
-      // Validate webhook secret using constant-time comparison
-      if (!webhookSecret || !cfAuth) {
-        return json(response, 401, { error: "Webhook sin autorización" });
-      }
-      const expected = Buffer.from(webhookSecret, "utf8");
-      const received = Buffer.from(String(cfAuth), "utf8");
-      if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+      if (!validateWebhookSecret(webhookSecret, cfAuth)) {
         return json(response, 401, { error: "Secreto de webhook inválido" });
       }
 
-      let body: unknown;
-      try {
-        body = await readBody(request);
-      } catch {
-        return json(response, 400, { error: "Body inválido" });
-      }
-
-      const webhookSchema = z.object({
-        data: z.object({
-          liveInput: z.object({
-            uid: z.string().min(1),
-          }),
-          state: z.string().optional(),
-        }),
-        event: z.string().min(1),
-        updated: z.string().optional(),
-      });
-
-      const parsed = webhookSchema.safeParse(body);
+      const parsed = cloudflareLiveWebhookSchema.safeParse(await readBody(request));
       if (!parsed.success) return json(response, 400, { error: "Payload de webhook inválido" });
 
-      const { data: eventData, event: eventType, updated } = parsed.data;
-      const inputUid = eventData.liveInput.uid;
-
-      // Map Cloudflare event to internal status
-      const statusMap: Record<string, string> = {
-        "live_input.connected": "live",
-        "live_input.disconnected": "disconnected",
-        "live_input.errored": "provider_error",
-      };
-      const newStatus = statusMap[eventType];
+      const { input_id: inputUid, event_type: eventType, updated_at: updatedAt } = parsed.data.data;
+      const newStatus = mapCloudflareEventToStatus(eventType);
       if (!newStatus) return json(response, 200, { ok: true }); // unknown event — ignore gracefully
 
       if (!canUseAdminSupabase()) {
@@ -1655,68 +1838,29 @@ const server = createServer(async (request, response) => {
         return json(response, 200, { ok: true });
       }
 
-      const supaAdmin = getAdminSupabaseClient();
-
-      // Find source by provider_input_id
-      const { data: sourceRow } = await supaAdmin
-        .from("live_sources")
-        .select("id, status, event_id")
-        .eq("provider_input_id", inputUid)
-        .is("deleted_at", null)
-        .maybeSingle();
-
-      if (!sourceRow) return json(response, 200, { ok: true }); // unknown input — ignore
-
-      // Deduplication: hash of input_uid + event_type + updated
-      const eventKey = createHash("sha256")
-        .update(`${inputUid}:${eventType}:${updated || ""}`)
-        .digest("hex");
-
-      const { data: existingEvent } = await supaAdmin
-        .from("live_source_webhook_events")
-        .select("id")
-        .eq("event_key", eventKey)
-        .maybeSingle();
-
-      if (existingEvent) return json(response, 200, { ok: true }); // already processed
-
-      const now = new Date().toISOString();
-      const updateData: Record<string, unknown> = {
-        status: newStatus,
-        updated_at: now,
-        last_provider_sync_at: now,
-      };
-      if (newStatus === "live") updateData.last_connected_at = now;
-      if (newStatus === "disconnected") updateData.last_disconnected_at = now;
-      if (newStatus === "provider_error") {
-        updateData.provider_error_code = "CLOUDFLARE_STREAM_ERRORED";
-      }
-
-      await supaAdmin
-        .from("live_sources")
-        .update(updateData)
-        .eq("id", sourceRow.id);
-
-      // Record deduplication entry
-      await supaAdmin.from("live_source_webhook_events").insert({
-        event_key: eventKey,
-        source_id: sourceRow.id,
-        event_type: eventType,
+      const { error } = await getAdminSupabaseClient().rpc("process_live_source_webhook", {
+        p_event_key: buildWebhookEventKey(inputUid, eventType, updatedAt),
+        p_provider_input_id: inputUid,
+        p_event_type: eventType,
+        p_status: newStatus,
+        p_updated_at: updatedAt,
+        p_error_code: newStatus === "provider_error" ? "CLOUDFLARE_STREAM_ERRORED" : null,
       });
-
-      await logAudit(request, `webhook_${eventType.replace(".", "_")}`, sourceRow.id, "success");
+      if (error) return json(response, 500, { error: "No se pudo procesar el evento" });
 
       return json(response, 200, { ok: true });
     }
 
     return json(response, 404, { error: "Ruta no encontrada" });
   } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return json(response, error.status, { error: error.status === 413 ? "Cuerpo de solicitud demasiado grande" : "JSON inválido" });
+    }
     if (error instanceof z.ZodError) {
-      console.error("Validation error:", error);
       return json(response, 400, { error: "Datos inválidos", issues: error.issues });
     }
     if (error instanceof Error && error.message.startsWith("La tabla sponsors")) return json(response, 500, { error: error.message });
-    console.error(error);
+    console.error("Unhandled request error");
     return json(response, 500, { error: "Error interno" });
   }
 });

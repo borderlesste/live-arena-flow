@@ -1,11 +1,6 @@
-export type LiveInputStatus =
-  | "provisioning"
-  | "ready"
-  | "connecting"
-  | "live"
-  | "disconnected"
-  | "disabled"
-  | "error";
+import type { LiveSourceStatus } from "../../../src/schemas/live-source.schema.js";
+
+export type LiveInputStatus = LiveSourceStatus;
 
 export interface CreatedLiveInput {
   provider: string;

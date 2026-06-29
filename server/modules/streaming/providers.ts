@@ -1,4 +1,5 @@
 import { randomUUID, randomBytes } from "node:crypto";
+import { z } from "zod";
 import type { CreatedLiveInput, CreateLiveInputInput, LiveInputStatus, LiveStreamProvider, RotatedLiveInputCredentials } from "./types.js";
 
 export class CustomRtmpProvider implements LiveStreamProvider {
@@ -8,7 +9,6 @@ export class CustomRtmpProvider implements LiveStreamProvider {
     const providerInputId = randomUUID();
     const streamKey = randomBytes(12).toString("base64url");
     const ingestBase = (process.env.STREAM_INGEST_URL || "rtmp://127.0.0.1/live").replace(/\/$/, "");
-    const playbackBase = (process.env.STREAM_PLAYBACK_BASE_URL || "http://127.0.0.1:8080/live").replace(/\/$/, "");
 
     const protocol = ingestBase.startsWith("rtmps") ? "rtmps" as const : ingestBase.startsWith("srt") ? "srt" as const : "rtmp" as const;
 
@@ -19,7 +19,9 @@ export class CustomRtmpProvider implements LiveStreamProvider {
       ingestUrl: ingestBase,
       streamKey,
       playbackFormat: "hls",
-      playbackUrl: `${playbackBase}/${streamKey}/index.m3u8`,
+      // A publishing key must never become part of a public playback URL.
+      // Custom sources fail closed until an independent HTTPS URL is configured.
+      playbackUrl: null,
       status: "ready",
     };
   }
@@ -33,9 +35,11 @@ export class CustomRtmpProvider implements LiveStreamProvider {
     try {
       const res = await fetch(`${apiUrl}/v3/paths/list`, { signal: AbortSignal.timeout(3000) });
       if (!res.ok) return "ready";
-      const data = await res.json() as any;
-      const items = data.items || [];
-      const pathActive = items.some((item: any) => item.sourceReady === true);
+      const parsed = z.object({
+        items: z.array(z.object({ sourceReady: z.boolean().optional() })).default([]),
+      }).safeParse(await res.json());
+      if (!parsed.success) return "ready";
+      const pathActive = parsed.data.items.some((item) => item.sourceReady === true);
       return pathActive ? "live" : "ready";
     } catch {
       return "ready";

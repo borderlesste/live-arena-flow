@@ -79,8 +79,7 @@ describe("buildCloudflareHlsUrl", () => {
   });
 
   it("throws when customerCode is not a string", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => buildCloudflareHlsUrl(null as any, "uid123")).toThrow();
+    expect(() => buildCloudflareHlsUrl(null as unknown as string, "uid123")).toThrow();
   });
 });
 
@@ -253,7 +252,7 @@ describe("CloudflareStreamProvider", () => {
       expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("live");
     });
 
-    it("maps 'reconnecting' state to 'connecting'", async () => {
+    it("maps 'reconnecting' state to 'reconnecting'", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
         new Response(JSON.stringify({
           success: true,
@@ -261,7 +260,7 @@ describe("CloudflareStreamProvider", () => {
           errors: [],
         }), { status: 200, headers: { "Content-Type": "application/json" } }),
       );
-      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("connecting");
+      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("reconnecting");
     });
 
     it("maps 'client_disconnect' to 'disconnected'", async () => {
@@ -275,7 +274,7 @@ describe("CloudflareStreamProvider", () => {
       expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("disconnected");
     });
 
-    it("maps 'failed_to_connect' to 'error'", async () => {
+    it("maps 'failed_to_connect' to 'provider_error'", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
         new Response(JSON.stringify({
           success: true,
@@ -283,7 +282,7 @@ describe("CloudflareStreamProvider", () => {
           errors: [],
         }), { status: 200, headers: { "Content-Type": "application/json" } }),
       );
-      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("error");
+      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("provider_error");
     });
 
     it("maps 'new_configuration_accepted' to 'ready'", async () => {
@@ -299,7 +298,7 @@ describe("CloudflareStreamProvider", () => {
 
     it("returns 'error' when Cloudflare API fails", async () => {
       vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("network"));
-      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("error");
+      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("provider_error");
     });
   });
 
@@ -314,6 +313,22 @@ describe("CloudflareStreamProvider", () => {
       const [url, options] = fetchSpy.mock.calls[0];
       expect(String(url)).toContain("uid-to-delete");
       expect((options as RequestInit).method).toBe("DELETE");
+    });
+  });
+
+  describe("enable and disable", () => {
+    it.each([
+      ["enableLiveInput", true],
+      ["disableLiveInput", false],
+    ] as const)("%s sends the Cloudflare enabled flag", async (method, enabled) => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+      const provider = new CloudflareStreamProvider();
+      await provider[method]("uid-toggle");
+      const [, options] = fetchSpy.mock.calls[0];
+      expect((options as RequestInit).method).toBe("PUT");
+      expect(JSON.parse(String((options as RequestInit).body))).toEqual({ enabled });
     });
   });
 

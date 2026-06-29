@@ -4,9 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
-const enabled = process.env.QA_LIVE_SUPABASE === "true" && Boolean(supabaseUrl && anonKey && serviceRoleKey);
+const enabled = process.env.QA_LIVE_SUPABASE === "true" && Boolean(supabaseUrl && publishableKey && serviceRoleKey);
 
 test.describe("persistencia real de usuario", () => {
   test.skip(!enabled, "Requiere QA_LIVE_SUPABASE=true y credenciales Supabase completas");

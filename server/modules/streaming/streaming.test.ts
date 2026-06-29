@@ -12,7 +12,6 @@ describe("CustomRtmpProvider", () => {
 
   it("createLiveInput returns a valid CreatedLiveInput with rtmp protocol", async () => {
     process.env.STREAM_INGEST_URL = "rtmp://ingest.example.com/live";
-    process.env.STREAM_PLAYBACK_BASE_URL = "https://cdn.example.com/live";
     const provider = new CustomRtmpProvider();
     const result = await provider.createLiveInput({ name: "Test Stream" });
 
@@ -20,7 +19,7 @@ describe("CustomRtmpProvider", () => {
     expect(result.ingestProtocol).toBe("rtmp");
     expect(result.ingestUrl).toBe("rtmp://ingest.example.com/live");
     expect(result.streamKey).toMatch(/^[A-Za-z0-9_-]{16}$/);
-    expect(result.playbackUrl).toContain("index.m3u8");
+    expect(result.playbackUrl).toBeNull();
     expect(result.status).toBe("ready");
     expect(result.playbackFormat).toBe("hls");
     expect(typeof result.providerInputId).toBe("string");
@@ -28,7 +27,6 @@ describe("CustomRtmpProvider", () => {
 
   it("createLiveInput detects rtmps protocol from URL", async () => {
     process.env.STREAM_INGEST_URL = "rtmps://secure.example.com:443/live";
-    process.env.STREAM_PLAYBACK_BASE_URL = "https://cdn.example.com/live";
     const provider = new CustomRtmpProvider();
     const result = await provider.createLiveInput({ name: "Secure Stream" });
     expect(result.ingestProtocol).toBe("rtmps");
@@ -36,7 +34,6 @@ describe("CustomRtmpProvider", () => {
 
   it("createLiveInput detects srt protocol from URL", async () => {
     process.env.STREAM_INGEST_URL = "srt://srt.example.com:9000";
-    process.env.STREAM_PLAYBACK_BASE_URL = "https://cdn.example.com/live";
     const provider = new CustomRtmpProvider();
     const result = await provider.createLiveInput({ name: "SRT Stream" });
     expect(result.ingestProtocol).toBe("srt");
@@ -48,15 +45,15 @@ describe("CustomRtmpProvider", () => {
     const provider = new CustomRtmpProvider();
     const result = await provider.createLiveInput({ name: "Local Test" });
     expect(result.ingestUrl).toContain("127.0.0.1");
-    expect(result.playbackUrl).toContain("127.0.0.1");
+    expect(result.playbackUrl).toBeNull();
   });
 
-  it("playbackUrl is built from streamKey and STREAM_PLAYBACK_BASE_URL", async () => {
+  it("never derives playbackUrl from streamKey and STREAM_PLAYBACK_BASE_URL", async () => {
     process.env.STREAM_INGEST_URL = "rtmp://ingest.example.com/live";
     process.env.STREAM_PLAYBACK_BASE_URL = "https://cdn.example.com/live";
     const provider = new CustomRtmpProvider();
     const result = await provider.createLiveInput({ name: "Key URL Test" });
-    expect(result.playbackUrl).toBe(`https://cdn.example.com/live/${result.streamKey}/index.m3u8`);
+    expect(result.playbackUrl).toBeNull();
   });
 
   it("each createLiveInput call generates unique providerInputId and streamKey", async () => {

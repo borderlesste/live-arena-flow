@@ -8,7 +8,7 @@ Backend: Local Node HTTP server in `server/index.ts`, intended for Render or ano
 
 Base de datos: Supabase PostgreSQL is modeled through versioned SQL migrations in `supabase/migrations`. Local development still has a JSON fallback at `server/data/app.json`.
 
-Autenticacion: Supabase Auth when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are configured. Legacy JSON auth is development-only and disabled in production.
+Autenticacion: Supabase Auth when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are configured. Legacy JSON auth is development-only and disabled in production.
 
 Realtime: Supabase Realtime for chat and presence. Realtime publication migration exists for `chat_messages` and `chat_rooms`.
 

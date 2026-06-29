@@ -13,6 +13,7 @@ import type { ChatMessage } from "@/types";
 import { reportChatMessage } from "@/services/chat.service";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { usePresence } from "@/hooks/usePresence";
+import { Link } from "react-router-dom";
 
 const EMOJIS = ["⚽", "🏀", "🔥", "👏", "🎉", "💪", "😂", "😮", "🤩", "❤️"];
 
@@ -189,7 +190,7 @@ export function ChatPanel({ className, matchTitle, roomKey = "global" }: ChatPan
 
       <footer className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1"><ShieldAlert className="h-3 w-3" aria-hidden="true" /> Respeta las normas de la comunidad.</span>
-        <a href="/community-rules" className="underline-offset-2 hover:underline">Normas</a>
+        <Link to="/community-rules" className="underline-offset-2 hover:underline">Normas</Link>
       </footer>
     </aside>
   );

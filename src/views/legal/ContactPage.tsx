@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 
 const ContactPage = () => {
   const [name, setName] = useState("");
@@ -45,7 +46,7 @@ const ContactPage = () => {
       <p>¿Quieres colaborar, retransmitir un evento o reportar un problema? Escríbenos:</p>
       <ul>
         <li><Mail className="mr-1 inline h-4 w-4" /> <a href="mailto:contacto@luisromerofutbol.com">contacto@luisromerofutbol.com</a></li>
-        <li><MessageCircle className="mr-1 inline h-4 w-4" /> <a href="/community-rules">Normas de la comunidad</a></li>
+        <li><MessageCircle className="mr-1 inline h-4 w-4" /> <Link to="/community-rules">Normas de la comunidad</Link></li>
       </ul>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">

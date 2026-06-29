@@ -116,7 +116,9 @@ export function subscribeChatMessages(roomKey: string, listener: (message: ChatM
         shared.listeners.forEach((current) => current(message));
       })
       .subscribe();
-  })().finally(() => { shared.connecting = undefined; });
+  })()
+    .catch(() => undefined)
+    .finally(() => { shared.connecting = undefined; });
 
   return () => {
     shared.listeners.delete(listener);
@@ -133,5 +135,27 @@ export async function reportChatMessage(messageId: string): Promise<void> {
   if (!session.session) throw new Error("Inicia sesión para reportar un mensaje");
   const { error } = await client.from("chat_message_reports").insert({ message_id: messageId, reporter_id: session.session.user.id, reason: "user_report" });
   if (error?.code === "23505") return;
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteOwnChatMessage(messageId: string): Promise<void> {
+  if (!isSupabaseConfigured) throw new Error("El borrado seguro requiere configurar Supabase");
+  const client = await getSupabaseClient();
+  const { error } = await client.rpc("delete_own_chat_message", { p_message_id: messageId });
+  if (error) throw new Error(error.message);
+}
+
+export async function moderateChatMessage(
+  messageId: string,
+  action: "delete" | "pin" | "unpin",
+  reason?: string,
+): Promise<void> {
+  if (!isSupabaseConfigured) throw new Error("La moderación segura requiere configurar Supabase");
+  const client = await getSupabaseClient();
+  const { error } = await client.rpc("moderate_chat_message", {
+    p_message_id: messageId,
+    p_action: action,
+    p_reason: reason ?? null,
+  });
   if (error) throw new Error(error.message);
 }
