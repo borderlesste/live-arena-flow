@@ -4,6 +4,7 @@ import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 
 const API_BASE = publicEnv.NEXT_PUBLIC_API_BASE_URL;
 const TOKEN_KEY = "arena-live:session-token";
+const legacyAuthAvailable = process.env.NODE_ENV !== "production";
 
 export type AppRole = "super_admin" | "admin" | "stream_operator" | "moderator" | "user";
 
@@ -92,7 +93,7 @@ async function supabaseProfile(): Promise<UserProfile> {
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  if (!isSupabaseConfigured) return legacyAuthenticate("login", { email, password });
+  if (!isSupabaseConfigured && legacyAuthAvailable) return legacyAuthenticate("login", { email, password });
   const { data, error } = await (await getSupabaseClient()).auth.signInWithPassword({ email, password });
   if (error || !data.session) throw new Error(error?.message ?? "No se pudo iniciar sesión");
   localStorage.setItem(TOKEN_KEY, data.session.access_token);
@@ -100,7 +101,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 export async function register(displayName: string, email: string, password: string): Promise<AuthResponse> {
-  if (!isSupabaseConfigured) return legacyAuthenticate("register", { displayName, email, password });
+  if (!isSupabaseConfigured && legacyAuthAvailable) return legacyAuthenticate("register", { displayName, email, password });
   const { data, error } = await (await getSupabaseClient()).auth.signUp({
     email,
     password,
@@ -136,38 +137,40 @@ export async function updatePassword(password: string): Promise<void> {
 }
 
 export async function getProfile(token: string): Promise<UserProfile> {
-  if (isSupabaseConfigured) return supabaseProfile();
-  return fetch(`${API_BASE}/profile`, { headers: { Authorization: `Bearer ${token}` } })
-    .then(responseJson<UserProfile>)
-    .then(normalizeLegacyProfile);
+  if (!isSupabaseConfigured && legacyAuthAvailable) {
+    return fetch(`${API_BASE}/profile`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(responseJson<UserProfile>)
+      .then(normalizeLegacyProfile);
+  }
+  return supabaseProfile();
 }
 
 export async function updateProfile(token: string, profile: Pick<UserProfile, "displayName" | "preferences">): Promise<UserProfile> {
-  if (isSupabaseConfigured) {
-    const supabase = await getSupabaseClient();
-    const { data: userResult } = await supabase.auth.getUser();
-    if (!userResult.user) throw new Error("La sesión ha expirado");
-    const { error } = await supabase.from("profiles").update({ display_name: profile.displayName, preferences: profile.preferences }).eq("id", userResult.user.id);
-    if (error) throw new Error(error.message);
-    return supabaseProfile();
+  if (!isSupabaseConfigured && legacyAuthAvailable) {
+    return fetch(`${API_BASE}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(profile) })
+      .then(responseJson<UserProfile>)
+      .then(normalizeLegacyProfile);
   }
-  return fetch(`${API_BASE}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(profile) })
-    .then(responseJson<UserProfile>)
-    .then(normalizeLegacyProfile);
+  const supabase = await getSupabaseClient();
+  const { data: userResult } = await supabase.auth.getUser();
+  if (!userResult.user) throw new Error("La sesión ha expirado");
+  const { error } = await supabase.from("profiles").update({ display_name: profile.displayName, preferences: profile.preferences }).eq("id", userResult.user.id);
+  if (error) throw new Error(error.message);
+  return supabaseProfile();
 }
 
 export async function logout(token: string): Promise<void> {
-  if (isSupabaseConfigured) {
+  if (!isSupabaseConfigured && legacyAuthAvailable) {
+    await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  } else {
     const { error } = await (await getSupabaseClient()).auth.signOut();
     if (error) throw new Error(error.message);
-  } else {
-    await fetch(`${API_BASE}/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   }
   localStorage.removeItem(TOKEN_KEY);
 }
 
 export function subscribeToAuth(callback: (event: AuthChangeEvent, session: Session | null) => void): () => void {
-  if (!isSupabaseConfigured) return () => undefined;
+  if (!isSupabaseConfigured && legacyAuthAvailable) return () => undefined;
   let cancelled = false;
   let unsubscribe: (() => void) | undefined;
   void getSupabaseClient().then((client) => {
@@ -178,7 +181,7 @@ export function subscribeToAuth(callback: (event: AuthChangeEvent, session: Sess
       callback(event, session);
     });
     unsubscribe = () => data.subscription.unsubscribe();
-  });
+  }).catch(() => undefined);
   return () => { cancelled = true; unsubscribe?.(); };
 }
 

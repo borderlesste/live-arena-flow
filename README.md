@@ -60,6 +60,6 @@ El adaptador JSON proporciona persistencia real para una instancia. En despliegu
 
 La implementación actual todavía no equivale a la arquitectura objetivo con Supabase, SportSRC, presencia y analítica agregada. Consulta [`docs/architecture.md`](docs/architecture.md) y los documentos de `docs/` para distinguir capacidades verificadas de bloqueos de producción.
 
-Las migraciones Supabase están en `supabase/migrations`. El frontend activa Supabase Auth al configurar `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; durante `next build`, si faltan esas variables públicas, el proyecto usa `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` como fallback seguro para evitar que el navegador caiga al adaptador legacy. En producción la API exige `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `STREAM_SECRET_KEY`.
+Las migraciones Supabase están en `supabase/migrations`. El frontend usa las variables públicas de Supabase cuando existen; si Vercel no las tiene, el Server Component obtiene la URL y la clave publicable desde `/api/config/public` a través de `API_INTERNAL_URL`. En producción Auth nunca cae al adaptador legacy. La API exige `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `STREAM_SECRET_KEY`.
 
 Con esas variables configuradas, chat, presencia, reportes, favoritos y métricas de patrocinadores usan Supabase/RLS/Realtime. Sin ellas se conserva el fallback JSON únicamente para desarrollo local; las rutas de chat heredadas responden `410` en producción.

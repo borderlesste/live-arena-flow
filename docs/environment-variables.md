@@ -8,8 +8,8 @@ This document lists names and responsibilities only. Do not commit real values.
 | --- | ---: | --- |
 | `NEXT_PUBLIC_APP_URL` | Recommended | Used for metadata and public links. |
 | `NEXT_PUBLIC_API_BASE_URL` | Recommended | Defaults to `/api`. |
-| `NEXT_PUBLIC_SUPABASE_URL` | Required for Supabase auth | Browser-safe project URL. During `next build`, `SUPABASE_URL` is used as fallback if this variable is omitted. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Required for Supabase auth | Browser-safe publishable key. Accepts modern `sb_publishable_…` and legacy public `anon` JWTs that are still valid. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Recommended | Browser-safe project URL. If omitted, Next retrieves it from the backend through `API_INTERNAL_URL`. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Recommended | Browser-safe publishable key. If omitted, Next retrieves it from the backend. Accepts modern `sb_publishable_…` and valid public `anon` JWTs. |
 
 ## Backend / Render
 

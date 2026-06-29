@@ -880,6 +880,14 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
   try {
     if (request.method === "GET" && url.pathname === "/api/health") return json(response, 200, healthPayload());
+    if (request.method === "GET" && url.pathname === "/api/config/public") {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+      const supabasePublishableKey = selectSupabasePublicKey();
+      if (!supabaseUrl || !supabasePublishableKey) {
+        return json(response, 503, { error: "Supabase public configuration is unavailable" });
+      }
+      return json(response, 200, { supabaseUrl, supabasePublishableKey });
+    }
     if (request.method === "GET" && url.pathname === "/api/brand") return json(response, 200, (await readStore()).brandSettings);
     if (request.method === "PUT" && url.pathname === "/api/admin/brand") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
