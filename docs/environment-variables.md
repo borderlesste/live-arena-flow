@@ -11,13 +11,18 @@ This document lists names and responsibilities only. Do not commit real values.
 | `NEXT_PUBLIC_SUPABASE_URL` | Recommended | Browser-safe project URL. If omitted, Next retrieves it from the backend through `API_INTERNAL_URL`. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Recommended | Browser-safe publishable key. If omitted, Next retrieves it from the backend. Accepts modern `sb_publishable_…` and valid public `anon` JWTs. |
 
+## Vercel Server Runtime
+
+| Variable | Required | Notes |
+| --- | ---: | --- |
+| `API_INTERNAL_URL` | Production | Public HTTPS origin of the persistent backend, without the `/api` suffix. Never use `localhost` or `127.0.0.1` in Vercel. |
+
 ## Backend / Render
 
 | Variable | Required | Notes |
 | --- | ---: | --- |
 | `API_PORT` | Optional | Defaults to `8787`. |
 | `APP_ORIGIN` | Required outside local defaults | Exact CORS origin. |
-| `API_INTERNAL_URL` | Required by Next/Vercel | Backend origin for rewrites. |
 | `SUPABASE_URL` | Production | Server-side Supabase URL. |
 | `SUPABASE_PUBLISHABLE_KEY` | Production | Public Supabase key used for token verification, profile repair and as build-time fallback for the browser when `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is omitted. Accepts modern `sb_publishable_…` and legacy public `anon` JWTs that are still valid. |
 | `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` | Admin metrics/features | Server only. |
@@ -39,14 +44,11 @@ This document lists names and responsibilities only. Do not commit real values.
 | --- | ---: | --- |
 | `SPORTSRC_API_KEY` | Required | SportSRC V2 license key. Server only; sent through `X-API-KEY`. |
 
-## Third-party Platform Variables
+## Compatibility Variables
 
 | Variable | Status | Notes |
 | --- | --- | --- |
-| `AUTH_GOOGLE_CLIENT_ID` | Referenced by configuration intent | Configure in Supabase Auth/dashboard as needed. |
-| `AUTH_GOOGLE_CLIENT_SECRET` | Secret | Server/dashboard only. |
 | `CLOUDFLARE_API_TOKEN` | Compatibility alias | Prefer `CLOUDFLARE_STREAM_API_TOKEN`; never expose either token. |
-| `RESEND_API_KEY` | Future/manual | Contact form currently persists locally; no email send integration is wired. |
 
 ## Validation Rules
 
