@@ -39,7 +39,9 @@ const publicSupabasePublishableKey = publicSupabaseExplicitlyDisabled
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
-  distDir: process.env.NEXT_DIST_DIR || ".next",
+  // Keep dev and production artifacts isolated: `prebuild` may safely clean
+  // `.next` without corrupting a concurrently running development server.
+  distDir: process.env.NEXT_DIST_DIR || (process.env.NODE_ENV === "development" ? ".next-dev" : ".next"),
   env: {
     NEXT_PUBLIC_SUPABASE_URL: publicSupabaseUrl,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicSupabasePublishableKey,

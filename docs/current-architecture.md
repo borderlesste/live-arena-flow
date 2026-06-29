@@ -14,9 +14,7 @@ Realtime: Supabase Realtime for chat and presence. Realtime publication migratio
 
 Storage: No Supabase Storage bucket or Cloudflare R2 integration is implemented in this checkout.
 
-API deportiva principal: Selected by `SPORTS_PROVIDER`; `sportsdataio` is preferred when fully configured, otherwise TheSportsDB is used.
-
-API deportiva secundaria: The other configured provider is used as fallback. TheSportsDB dev public key is allowed only outside production.
+API deportiva: SportSRC V2 is the only provider. The backend normalizes its grouped match responses and authenticates with `X-API-KEY`.
 
 Hosting frontend: Vercel-compatible Next.js build. No `vercel.json` is present.
 
@@ -43,8 +41,7 @@ Streaming: Admin-managed video sources and OBS ingest metadata. Public responses
 | Render | Parcial | Si | No verificable localmente | Probable backend | Persistent Node API |
 | Cloudflare | Parcial | Si | No | Futuro/manual | DNS/WAF/CDN, not committed |
 | Supabase | Si | Si | Si cuando env existe | Si | Auth, PostgreSQL, RLS, Realtime |
-| SportsDataIO/SportSRC | Parcial | Si | Solo si env completo | Principal opcional | Sports provider |
-| TheSportsDB | Si | Si | Si | Fallback/principal | Sports metadata and live fallback |
+| SportSRC V2 | Si | Si | Si con licencia | Si | Datos, resultados y estados en vivo |
 
 ## Main Risks
 

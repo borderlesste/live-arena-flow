@@ -13,7 +13,7 @@ const CompetitionsPage = () => {
         <h1 className="font-display text-3xl font-bold">Competiciones</h1>
         <p className="text-sm text-muted-foreground">Sigue ligas, copas y torneos en un solo lugar.</p>
       </header>
-      {competitions.length === 0 ? <EmptyState title="Sin competiciones disponibles" description="TheSportsDB no devolvió competiciones para las fechas consultadas." /> : <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      {competitions.length === 0 ? <EmptyState title="Sin competiciones disponibles" description="SportSRC no devolvió competiciones para las fechas consultadas." /> : <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {competitions.map((c) => <CompetitionCard key={c.id} competition={c} />)}
       </div>}
     </section>

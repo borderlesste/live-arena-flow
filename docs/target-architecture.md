@@ -12,7 +12,7 @@ Supabase owns PostgreSQL, Auth, RLS, Realtime and future Storage. Production dat
 
 Cloudflare may own DNS, WAF, rate limiting and public cache rules. It should not duplicate frontend hosting unless the frontend is intentionally moved off Vercel.
 
-SportsDataIO/SportSRC and TheSportsDB remain behind the normalized `SportsProvider` contract. The frontend must never consume provider-native shapes.
+SportSRC V2 remains behind the normalized `SportsProvider` contract. The frontend must never consume provider-native shapes.
 
 ## Replacement Decisions
 
@@ -23,8 +23,7 @@ SportsDataIO/SportSRC and TheSportsDB remain behind the normalized `SportsProvid
 | Render | Persistent API | Si mientras haya Node server | Parcial | Vercel Functions or Cloudflare Workers only after API is simplified | Conservar |
 | Cloudflare | DNS/WAF/CDN | Opcional | Si | Vercel edge protections | Mantener como manual/futuro si aporta WAF |
 | Supabase | DB/Auth/Realtime | Si | No sin redisenar | Custom Postgres/Auth stack | Conservar |
-| SportsDataIO/SportSRC | Primary sports data | Opcional | Si | TheSportsDB only | Usar si la key funciona |
-| TheSportsDB | Fallback sports data | Si para dev/fallback | Parcial | SportsDataIO paid coverage | Conservar fallback |
+| SportSRC V2 | Sports data | Si | Si | Provider migration | Unico proveedor activo |
 
 ## Refactoring Direction
 

@@ -9,7 +9,7 @@
     "dev:web": "next dev -p 8080",
     "dev:server": "tsx watch server/index.ts",
     "server": "tsx server/index.ts",
-    "sportsdataio:check": "tsx scripts/check-sportsdataio.ts",
+    "sportsrc:check": "tsx scripts/check-sportsrc.ts",
     "qa:persistence": "tsx scripts/qa-user-persistence.ts",
     "prebuild": "node scripts/clean-next.mjs && tsx scripts/generate-sitemap.ts",
     "build": "next build",

@@ -33,18 +33,11 @@ This document lists names and responsibilities only. Do not commit real values.
 | `ADMIN_API_TOKEN` | Dev/test only | Disabled as a production admin shortcut. |
 | `LEGACY_AUTH_ENABLED` | Dev only | Must stay false in production. |
 
-## Sports Providers
+## SportSRC V2
 
 | Variable | Required | Notes |
 | --- | ---: | --- |
-| `SPORTS_PROVIDER` | Optional | `sportsdataio`, `sportsrc`, or `thesportsdb`. |
-| `SPORTSRC_BASE_URL` | If SportsDataIO enabled | Example shape: provider API base URL. |
-| `SPORTSRC_API_KEY` | If SportsDataIO enabled | Server only. |
-| `SPORTSRC_EVENTS_PATH` | Optional | Defaults to `GamesByDate/{date}`. |
-| `SPORTSRC_EVENT_PATH` | Optional | Defaults to `Game/{id}`. |
-| `SPORTSRC_LIVE_EVENTS_PATH` | Optional | Used when the provider exposes a dedicated live endpoint. |
-| `SPORTSRC_AUTH_HEADER` | Optional | Defaults to `Ocp-Apim-Subscription-Key`. |
-| `THESPORTSDB_API_KEY` | Production fallback or primary | Server only. |
+| `SPORTSRC_API_KEY` | Required | SportSRC V2 license key. Server only; sent through `X-API-KEY`. |
 
 ## Third-party Platform Variables
 
@@ -57,7 +50,7 @@ This document lists names and responsibilities only. Do not commit real values.
 
 ## Validation Rules
 
-- Production must configure at least one sports provider without relying on TheSportsDB public dev key.
+- Every environment must configure `SPORTSRC_API_KEY`.
 - Production must configure Supabase auth variables.
 - Production must configure `STREAM_SECRET_KEY` with at least 32 characters.
 - Cloudflare production must configure a webhook secret with at least 32 characters.

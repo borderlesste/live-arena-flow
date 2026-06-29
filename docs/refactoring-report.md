@@ -13,7 +13,7 @@ This pass added CI, safer health diagnostics, production sports-provider validat
 - Frontend: Next.js 15 serving React 18 SPA components.
 - Backend: Node HTTP API in `server/index.ts`.
 - DB/Auth/Realtime: Supabase migrations, Auth and Realtime are present.
-- Sports APIs: SportsDataIO/SportSRC plus TheSportsDB behind `SportsProvider`.
+- Sports API: SportSRC V2 behind the normalized `SportsProvider` contract.
 - Streaming: Admin-managed video sources plus OBS ingest metadata; public responses strip secrets.
 - Deployment: Vercel/Render split is intended but not codified through `vercel.json` or `render.yaml`.
 
@@ -26,7 +26,7 @@ Severidad: Media
 Archivo: `.env.example`
 Problema: OAuth and provider variable names were incomplete or mismatched with the active code/configuration.
 Impacto: New environments can be configured with unused names and miss required live/provider values.
-Correccion: Added `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET`, `SPORTSRC_LIVE_EVENTS_PATH`, `SUPABASE_PUBLISHABLE_KEY` and `RESEND_API_KEY`.
+Correccion: Added the required authentication and integration variables; SportSRC now only requires `SPORTSRC_API_KEY`.
 Validacion: `npm run typecheck`, `npm run lint`.
 Estado: Corregido.
 
@@ -35,9 +35,9 @@ Estado: Corregido.
 ID: F-002
 Severidad: Alta
 Archivo: `server/modules/sports/index.ts`
-Problema: Production could silently rely on TheSportsDB public development key when no provider key was configured.
-Impacto: Fragile production startup and unreliable quota/live coverage.
-Correccion: Production now fails clearly unless at least one sports provider is configured.
+Problema: Production could start without the required SportSRC license.
+Impacto: Fragile startup and unreliable quota/live coverage.
+Correccion: Startup now fails clearly unless `SPORTSRC_API_KEY` is configured.
 Validacion: Typecheck and unit tests.
 Estado: Corregido.
 
@@ -149,7 +149,7 @@ Estado: Pendiente.
 
 ## Provider State
 
-Primary provider is selected by `SPORTS_PROVIDER`. SportsDataIO/SportSRC is active only when base URL and key are configured. TheSportsDB remains fallback or primary. Production requires at least one configured provider.
+SportSRC V2 is the only sports provider. Its endpoint and authentication header are fixed in code; every environment requires `SPORTSRC_API_KEY`.
 
 ## Validation Results
 
@@ -168,7 +168,7 @@ Primary provider is selected by `SPORTS_PROVIDER`. SportsDataIO/SportSRC is acti
 - Confirm Render service, health check path and secrets.
 - Confirm Cloudflare DNS/WAF/cache rules in dashboard.
 - Confirm Supabase project migrations are applied.
-- Confirm SportsDataIO key validity if it is intended as primary.
+- Confirm that the SportSRC account plan and quota match the production subscription.
 
 ## Rollback Notes
 

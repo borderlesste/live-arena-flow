@@ -166,7 +166,7 @@ function Dashboard({ metrics, users, sources, sponsorCount, reports, sportsProvi
       <Alert className={sportsProviderError ? "border-warning/40 bg-warning/5" : ""}>
         <ShieldCheck className="h-4 w-4" />
         <AlertTitle>Estado de datos deportivos</AlertTitle>
-        <AlertDescription>{sportsProviderError ? "El proveedor primario falló; la app puede usar fallback si está disponible. Revisa la API key de SportSRC/SportsDataIO." : "El backend deportivo respondió y el panel puede listar eventos."}</AlertDescription>
+        <AlertDescription>{sportsProviderError ? "SportSRC no respondió correctamente. Revisa la licencia y la cuota de la cuenta." : "SportSRC respondió y el panel puede listar eventos."}</AlertDescription>
       </Alert>
     </div>
   );

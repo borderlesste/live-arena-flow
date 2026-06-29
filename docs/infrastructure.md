@@ -19,7 +19,6 @@ Do not store these on Vercel:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_SECRET_KEY`
 - `SPORTSRC_API_KEY`
-- `THESPORTSDB_API_KEY`
 - `STREAM_SECRET_KEY`
 - `ADMIN_API_TOKEN`
 
@@ -44,8 +43,8 @@ Do not store these on Vercel:
 - Realtime publication is configured for chat tables.
 - Storage buckets are not represented in migrations.
 
-## Sports APIs
+## SportSRC V2
 
-- SportsDataIO/SportSRC requires `SPORTSRC_BASE_URL` and `SPORTSRC_API_KEY`.
-- TheSportsDB requires `THESPORTSDB_API_KEY` in production.
-- The development fallback public TheSportsDB key is not accepted in production after the latest hardening.
+- The backend requires `SPORTSRC_API_KEY` in every environment.
+- The API endpoint is fixed to `https://api.sportsrc.org/v2/` and authentication uses `X-API-KEY`.
+- No sports API key is exposed through Vercel or `NEXT_PUBLIC_*`.

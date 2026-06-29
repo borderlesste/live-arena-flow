@@ -25,68 +25,6 @@ export interface SportsProvider {
   eventById(id: string): Promise<NormalizedSportsEvent | undefined>;
 }
 
-export class FallbackSportsProvider implements SportsProvider {
-  readonly name: string;
-
-  constructor(
-    private readonly primary: SportsProvider,
-    private readonly secondary: SportsProvider,
-  ) {
-    this.name = `${primary.name}+${secondary.name}`;
-  }
-
-  async eventsByDate(date: string): Promise<NormalizedSportsEvent[]> {
-    try {
-      const events = await this.primary.eventsByDate(date);
-      if (events.length > 0) return events;
-
-      try {
-        return await this.secondary.eventsByDate(date);
-      } catch (error) {
-        console.warn(`[sports] ${this.secondary.name} fallback failed; returning the empty ${this.primary.name} response`, error);
-        return events;
-      }
-    } catch (primaryError) {
-      console.warn(`[sports] ${this.primary.name} failed; using ${this.secondary.name}`, primaryError);
-      return this.secondary.eventsByDate(date);
-    }
-  }
-
-  async liveEvents(): Promise<NormalizedSportsEvent[]> {
-    try {
-      const events = await this.primary.liveEvents();
-      if (events.length > 0) return events;
-
-      try {
-        return await this.secondary.liveEvents();
-      } catch (error) {
-        console.warn(`[sports] ${this.secondary.name} live fallback failed; returning the empty ${this.primary.name} response`, error);
-        return events;
-      }
-    } catch (primaryError) {
-      console.warn(`[sports] ${this.primary.name} live failed; using ${this.secondary.name}`, primaryError);
-      return this.secondary.liveEvents();
-    }
-  }
-
-  async eventById(id: string): Promise<NormalizedSportsEvent | undefined> {
-    try {
-      const event = await this.primary.eventById(id);
-      if (event) return event;
-
-      try {
-        return await this.secondary.eventById(id);
-      } catch (error) {
-        console.warn(`[sports] ${this.secondary.name} fallback failed after ${this.primary.name} returned no event`, error);
-        return undefined;
-      }
-    } catch (primaryError) {
-      console.warn(`[sports] ${this.primary.name} failed; using ${this.secondary.name}`, primaryError);
-      return this.secondary.eventById(id);
-    }
-  }
-}
-
 interface RequestOptions { headers?: Record<string, string> }
 
 export class ResilientHttpClient {

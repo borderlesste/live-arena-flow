@@ -1,127 +1,199 @@
 import { z } from "zod";
-import { normalizedSportsEventSchema, ResilientHttpClient, type NormalizedSportsEvent, type SportsProvider } from "./sports-provider.js";
+import {
+  normalizedSportsEventSchema,
+  ResilientHttpClient,
+  type NormalizedSportsEvent,
+  type SportsProvider,
+} from "./sports-provider.js";
 
-const identifier = z.union([z.string(), z.number()]).transform(String);
-const score = z.union([z.string(), z.number()]).nullish().transform((value) => {
+export const SPORTSRC_API_BASE_URL = "https://api.sportsrc.org/v2/";
+
+const identifierSchema = z.union([z.string(), z.number()]).transform(String);
+const optionalStringSchema = z.string().nullish().transform((value) => value?.trim() || undefined);
+const scoreValueSchema = z.union([z.string(), z.number()]).nullish().transform((value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
 });
 
-const sportsDataGameSchema = z.object({
-  GameId: identifier,
-  DateTime: z.string().optional(),
-  Day: z.string().optional(),
-  Status: z.string().optional(),
-  Clock: z.string().nullish(),
-  HomeTeamId: identifier.optional(),
-  HomeTeamKey: z.string().optional(),
-  HomeTeamName: z.string().optional(),
-  AwayTeamId: identifier.optional(),
-  AwayTeamKey: z.string().optional(),
-  AwayTeamName: z.string().optional(),
-  HomeTeamScore: score,
-  AwayTeamScore: score,
-  CompetitionId: identifier.optional(),
-  CompetitionName: z.string().optional(),
-  Competition: z.string().optional(),
-  RoundId: identifier.optional(),
-  Group: z.string().nullish(),
-  Venue: z.string().nullish(),
-  VenueName: z.string().nullish(),
+const leagueSchema = z.object({
+  name: z.string().min(1),
+  country: optionalStringSchema,
+  flag: optionalStringSchema,
+  logo: optionalStringSchema,
 }).passthrough();
 
-type SportsDataGame = z.infer<typeof sportsDataGameSchema>;
+const teamSchema = z.object({
+  name: z.string().min(1),
+  code: optionalStringSchema,
+  badge: optionalStringSchema,
+  color: optionalStringSchema,
+}).passthrough();
 
-function formatSportsDataDate(date: string): string {
-  const value = new Date(`${date}T12:00:00Z`);
-  if (Number.isNaN(value.getTime())) throw new Error("SPORTSDATAIO_INVALID_DATE");
-  const month = value.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase();
-  return `${value.getUTCFullYear()}-${month}-${String(value.getUTCDate()).padStart(2, "0")}`;
+const matchSchema = z.object({
+  id: identifierSchema,
+  timestamp: z.union([z.string(), z.number()]),
+  title: optionalStringSchema,
+  status: optionalStringSchema,
+  status_detail: optionalStringSchema,
+  round: z.union([z.string(), z.number()]).nullish(),
+  has_highlights: z.boolean().optional(),
+  teams: z.object({ home: teamSchema, away: teamSchema }),
+  score: z.object({
+    current: z.object({ home: scoreValueSchema, away: scoreValueSchema }).nullish(),
+    display: optionalStringSchema,
+    normal_time: z.unknown().optional(),
+    period_1: z.unknown().optional(),
+    period_2: z.unknown().optional(),
+  }).nullish(),
+  league: leagueSchema.optional(),
+}).passthrough();
+
+const matchGroupSchema = z.object({
+  league: leagueSchema,
+  matches: z.array(matchSchema),
+}).passthrough();
+
+const listEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.array(matchGroupSchema),
+}).passthrough();
+
+const detailEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    match_info: matchSchema,
+    info: z.object({ venue: z.unknown().optional() }).passthrough().optional(),
+    sources: z.array(z.unknown()).optional(),
+  }).passthrough(),
+}).passthrough();
+
+type SportSrcLeague = z.infer<typeof leagueSchema>;
+type SportSrcMatch = z.infer<typeof matchSchema>;
+
+function safeUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-function normalizeStatus(value?: string): NormalizedSportsEvent["status"] {
-  const status = value?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
-  if (["final", "finished", "closed", "f"].includes(status)) return "finished";
-  if (["inprogress", "live", "halftime", "1h", "2h"].includes(status)) return status === "halftime" ? "halftime" : "live";
-  if (["postponed", "delayed"].includes(status)) return "postponed";
-  if (["canceled", "cancelled"].includes(status)) return "cancelled";
-  if (["suspended", "interrupted"].includes(status)) return "paused";
+function entityId(prefix: string, value: string): string {
+  const slug = value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `sportsrc-${prefix}-${slug || "unknown"}`;
+}
+
+function normalizeTimestamp(value: string | number): string {
+  if (typeof value === "number" || /^\d+$/.test(value)) {
+    const numeric = Number(value);
+    const milliseconds = numeric < 10_000_000_000 ? numeric * 1_000 : numeric;
+    const parsed = new Date(milliseconds);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  throw new Error("SPORTSRC_INVALID_TIMESTAMP");
+}
+
+function normalizeStatus(status?: string, detail?: string): NormalizedSportsEvent["status"] {
+  const normalized = status?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  const normalizedDetail = detail?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  if (normalized === "finished") return "finished";
+  if (["inprogress", "live"].includes(normalized)) {
+    return normalizedDetail === "halftime" ? "halftime" : "live";
+  }
+  if (["interrupted", "suspended", "paused"].includes(normalized)) return "paused";
+  if (normalized === "postponed") return "postponed";
+  if (["cancelled", "canceled"].includes(normalized)) return "cancelled";
   return "scheduled";
 }
 
-function normalizeDate(value: string | undefined): string {
-  if (!value) return new Date(0).toISOString();
-  const withZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`;
-  const parsed = new Date(withZone);
-  return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+function venueName(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["name", "stadium", "venue"]) {
+    if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
+  }
+  return undefined;
 }
 
-function normalize(game: SportsDataGame): NormalizedSportsEvent {
-  const competitionId = game.CompetitionId ?? game.RoundId ?? `sportsdata-competition-${game.GameId}`;
-  const homeId = game.HomeTeamId ?? game.HomeTeamKey ?? `sportsdata-home-${game.GameId}`;
-  const awayId = game.AwayTeamId ?? game.AwayTeamKey ?? `sportsdata-away-${game.GameId}`;
+function normalize(match: SportSrcMatch, groupedLeague?: SportSrcLeague, venue?: unknown): NormalizedSportsEvent {
+  const league = match.league ?? groupedLeague;
+  if (!league) throw new Error("SPORTSRC_MISSING_LEAGUE");
+  const homeKey = match.teams.home.code ?? match.teams.home.name;
+  const awayKey = match.teams.away.code ?? match.teams.away.name;
+  const leagueKey = `${league.country ?? "international"}-${league.name}`;
+
   return normalizedSportsEventSchema.parse({
-    id: `sportsdata-${game.GameId}`,
-    startsAt: normalizeDate(game.DateTime ?? game.Day),
-    sport: "Soccer",
-    competition: { id: competitionId, name: game.CompetitionName ?? game.Competition ?? game.Group ?? "Soccer" },
-    homeTeam: { id: homeId, name: game.HomeTeamName ?? game.HomeTeamKey ?? `Team ${homeId}` },
-    awayTeam: { id: awayId, name: game.AwayTeamName ?? game.AwayTeamKey ?? `Team ${awayId}` },
-    homeScore: game.HomeTeamScore,
-    awayScore: game.AwayTeamScore,
-    status: normalizeStatus(game.Status),
-    statusLabel: game.Clock ?? game.Status,
-    venue: game.VenueName ?? game.Venue ?? undefined,
+    id: `sportsrc-${match.id}`,
+    startsAt: normalizeTimestamp(match.timestamp),
+    sport: "Football",
+    competition: {
+      id: entityId("competition", leagueKey),
+      name: league.name,
+      region: league.country,
+      badgeUrl: safeUrl(league.logo),
+    },
+    homeTeam: {
+      id: entityId("team", homeKey),
+      name: match.teams.home.name,
+      badgeUrl: safeUrl(match.teams.home.badge),
+    },
+    awayTeam: {
+      id: entityId("team", awayKey),
+      name: match.teams.away.name,
+      badgeUrl: safeUrl(match.teams.away.badge),
+    },
+    homeScore: match.score?.current?.home ?? 0,
+    awayScore: match.score?.current?.away ?? 0,
+    status: normalizeStatus(match.status, match.status_detail),
+    statusLabel: match.status_detail ?? match.status,
+    venue: venueName(venue),
   });
 }
 
 export class SportSrcProvider implements SportsProvider {
-  readonly name = "sportsdataio";
+  readonly name = "sportsrc";
 
   constructor(
-    private readonly baseUrl: string,
     private readonly apiKey: string,
-    private readonly eventsPath = "GamesByDate/{date}",
-    private readonly authHeader = "Ocp-Apim-Subscription-Key",
     private readonly client = new ResilientHttpClient(),
-    private readonly eventPath = "Game/{id}",
-    private readonly liveEventsPath?: string,
-  ) {}
-
-  private headers() {
-    return { [this.authHeader]: this.authHeader.toLowerCase() === "authorization" ? `Bearer ${this.apiKey}` : this.apiKey };
+  ) {
+    if (!apiKey.trim()) throw new Error("SPORTSRC_API_KEY_REQUIRED");
   }
 
-  private async request(path: string): Promise<NormalizedSportsEvent[]> {
-    const url = new URL(path.replace(/^\//, ""), this.baseUrl.endsWith("/") ? this.baseUrl : `${this.baseUrl}/`);
-    const payload = await this.client.json(url, { headers: this.headers() });
-    const candidate = Array.isArray(payload) ? payload : (payload as { data?: unknown }).data ?? payload;
-    const rows = Array.isArray(candidate) ? candidate : [candidate];
-    return sportsDataGameSchema.array().parse(rows).map(normalize);
+  private async request(params: Record<string, string>): Promise<unknown> {
+    const url = new URL(SPORTSRC_API_BASE_URL);
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+    return this.client.json(url, { headers: { "X-API-KEY": this.apiKey } });
+  }
+
+  private async list(params: Record<string, string>): Promise<NormalizedSportsEvent[]> {
+    const payload = listEnvelopeSchema.parse(await this.request({ type: "matches", sport: "football", ...params }));
+    return payload.data.flatMap((group) => group.matches.map((match) => normalize(match, group.league)));
   }
 
   eventsByDate(date: string) {
-    return this.request(this.eventsPath.replace("{date}", formatSportsDataDate(date)));
+    const parsed = z.string().date().parse(date);
+    return this.list({ date: parsed });
   }
 
-  async liveEvents() {
-    if (this.liveEventsPath) {
-      return this.request(this.liveEventsPath).then((events) => events.filter((event) => ["live", "halftime", "paused"].includes(event.status)));
-    }
-    const dates = [-1, 0, 1].map((offset) => {
-      const value = new Date();
-      value.setUTCDate(value.getUTCDate() + offset);
-      return value.toISOString().slice(0, 10);
-    });
-    const events = await Promise.all(dates.map((date) => this.eventsByDate(date)));
-    return events.flat().filter((event) => ["live", "halftime", "paused"].includes(event.status));
+  liveEvents() {
+    return this.list({ status: "inprogress" }).then((events) =>
+      events.filter((event) => ["live", "halftime", "paused"].includes(event.status)),
+    );
   }
 
   async eventById(id: string) {
-    if (!id.startsWith("sportsdata-")) return undefined;
-    const externalId = id.replace(/^sportsdata-/, "");
-    return (await this.request(this.eventPath.replace("{id}", encodeURIComponent(externalId))))[0];
+    if (!id.startsWith("sportsrc-")) return undefined;
+    const externalId = id.slice("sportsrc-".length);
+    if (!externalId) return undefined;
+    const payload = detailEnvelopeSchema.parse(await this.request({ type: "detail", id: externalId }));
+    return normalize(payload.data.match_info, undefined, payload.data.info?.venue);
   }
 }
 
-export { formatSportsDataDate };
+export { normalizeStatus as normalizeSportSrcStatus };

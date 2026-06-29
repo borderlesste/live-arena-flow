@@ -1,9 +1,23 @@
-# Sports data provider
+# SportSRC V2
 
-Only the backend calls sports providers. `SportsProvider` normalizes responses before they cross the API boundary, caches date windows, applies timeouts, retries 429/5xx failures and opens a circuit after repeated failures. The frontend no longer imports TheSportsDB response types.
+SportSRC V2 is the only sports data provider. The backend uses the fixed endpoint `https://api.sportsrc.org/v2/`, authenticates with `X-API-KEY`, validates the `success/data` envelope and converts provider-native data to `NormalizedSportsEvent`.
 
-The TheSportsDB adapter requests Soccer, Basketball, Baseball and Volleyball explicitly for each date, normalizes provider states and deduplicates event IDs. This prevents the small unfiltered `eventsday.php` subset from leaving frontend sport and status filters empty.
+Required environment variable:
 
-Select `SPORTS_PROVIDER=thesportsdb` or `sportsdataio`. SportsDataIO uses `GamesByDate/{date}`, dates formatted as `YYYY-MMM-DD`, and `Ocp-Apim-Subscription-Key` by default. The paths and authentication header remain configurable through `SPORTSRC_EVENTS_PATH`, `SPORTSRC_EVENT_PATH` and `SPORTSRC_AUTH_HEADER`.
+```text
+SPORTSRC_API_KEY=
+```
 
-Run `npm run sportsdataio:check -- YYYY-MM-DD` before activating the provider. The command never prints the key. A configured `SPORTSRC_API_KEY` remains inactive until `SPORTS_PROVIDER=sportsdataio` is set; do this only after the check succeeds. Scheduled synchronization and durable quota accounting remain pending.
+Supported operations:
+
+- Date schedule: `type=matches&sport=football&date=YYYY-MM-DD`.
+- Live status: `type=matches&sport=football&status=inprogress`.
+- Match detail: `type=detail&id={match_id}`.
+
+The in-memory cache keeps date windows for five minutes and live results for one minute. Run the non-secret validation command after rotating the license:
+
+```powershell
+npm.cmd run sportsrc:check -- 2026-06-29
+```
+
+Official documentation: <https://www.sportsrc.org/v2/#docs>.

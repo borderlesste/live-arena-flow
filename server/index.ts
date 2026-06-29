@@ -444,10 +444,8 @@ function healthPayload() {
     database: canUseAdminSupabase() ? "configured" : "not_configured",
     auth: supabaseAuthConfigured() ? "supabase_configured" : LEGACY_AUTH_ENABLED ? "legacy_dev_enabled" : "not_configured",
     primarySportsProvider: sports.primaryProvider,
-    secondarySportsProvider: sports.secondaryProvider ?? "optional_not_configured",
     sportsProviders: {
-      sportsdataio: sports.sportsDataIoConfigured ? "configured" : "not_configured",
-      thesportsdb: sports.theSportsDbConfigured ? "configured" : process.env.NODE_ENV === "production" ? "not_configured" : "dev_public_key",
+      sportsrc: sports.sportsSrcConfigured ? "configured" : "not_configured",
     },
   };
 }

@@ -14,7 +14,7 @@ Frontend: `http://localhost:8080`
 
 Backend: `http://127.0.0.1:8787/api/health`
 
-Las APIs deportivas se consumen exclusivamente desde el backend. `SPORTS_PROVIDER` define la prioridad entre SportsDataIO y TheSportsDB; cuando ambas están configuradas, la secundaria entra automáticamente si la principal falla o no devuelve contenido utilizable. Las claves nunca se incluyen en el bundle del navegador.
+Los datos deportivos se consumen exclusivamente desde SportSRC V2 a través del backend. La licencia `SPORTSRC_API_KEY` nunca se incluye en el bundle del navegador.
 
 ## Persistencia
 

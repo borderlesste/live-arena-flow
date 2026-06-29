@@ -1,14 +1,56 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { CachedSportsProvider, FallbackSportsProvider, ResilientHttpClient, type NormalizedSportsEvent, type SportsProvider } from "./sports-provider.js";
-import { TheSportsDbProvider } from "./thesportsdb.provider.js";
-import { formatSportsDataDate, SportSrcProvider } from "./sportsrc.provider.js";
+import {
+  CachedSportsProvider,
+  ResilientHttpClient,
+  type NormalizedSportsEvent,
+  type SportsProvider,
+} from "./sports-provider.js";
+import { normalizeSportSrcStatus, SportSrcProvider } from "./sportsrc.provider.js";
 
 const event: NormalizedSportsEvent = {
-  id: "event-1", startsAt: "2026-06-21T12:00:00.000Z", sport: "Soccer",
-  competition: { id: "league-1", name: "League" }, homeTeam: { id: "home", name: "Home" }, awayTeam: { id: "away", name: "Away" },
-  homeScore: 0, awayScore: 0, status: "scheduled",
+  id: "event-1",
+  startsAt: "2026-06-21T12:00:00.000Z",
+  sport: "Football",
+  competition: { id: "league-1", name: "League" },
+  homeTeam: { id: "home", name: "Home" },
+  awayTeam: { id: "away", name: "Away" },
+  homeScore: 0,
+  awayScore: 0,
+  status: "scheduled",
 };
+
+const sportSrcMatch = {
+  id: "match-42",
+  timestamp: 1_782_061_200,
+  title: "Brasil vs Argentina",
+  status: "finished",
+  status_detail: "Ended",
+  round: "Final",
+  has_highlights: true,
+  teams: {
+    home: { name: "Brasil", code: "BRA", badge: "https://cdn.example/bra.png", color: "#00aa00" },
+    away: { name: "Argentina", code: "ARG", badge: "https://cdn.example/arg.png", color: "#00aaff" },
+  },
+  score: {
+    current: { home: 2, away: 1 },
+    display: "2 - 1",
+    normal_time: null,
+    period_1: null,
+    period_2: null,
+  },
+};
+
+const sportSrcLeague = {
+  name: "World Cup",
+  country: "International",
+  flag: "https://cdn.example/flag.png",
+  logo: "https://cdn.example/league.png",
+};
+
+function listPayload(match = sportSrcMatch) {
+  return { success: true, data: [{ league: sportSrcLeague, matches: [match] }] };
+}
 
 describe("CachedSportsProvider", () => {
   it("does not spend provider quota twice within the TTL", async () => {
@@ -20,75 +62,13 @@ describe("CachedSportsProvider", () => {
     expect(eventsByDate).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes live events with a shorter cache", async () => {
+  it("uses a shorter cache for live events", async () => {
     const liveEvents = vi.fn(async () => [event]);
     const provider: SportsProvider = { name: "test", eventsByDate: async () => [event], liveEvents, eventById: async () => event };
     const cached = new CachedSportsProvider(provider, 60_000);
     await cached.liveEvents();
     await cached.liveEvents();
     expect(liveEvents).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("FallbackSportsProvider", () => {
-  it("uses the secondary provider when the primary fails", async () => {
-    const primary: SportsProvider = {
-      name: "primary",
-      eventsByDate: vi.fn().mockRejectedValue(new Error("offline")),
-      liveEvents: vi.fn().mockRejectedValue(new Error("offline")),
-      eventById: vi.fn().mockRejectedValue(new Error("offline")),
-    };
-    const secondary: SportsProvider = {
-      name: "secondary",
-      eventsByDate: vi.fn(async () => [event]),
-      liveEvents: vi.fn(async () => [event]),
-      eventById: vi.fn(async () => event),
-    };
-    const provider = new FallbackSportsProvider(primary, secondary);
-
-    await expect(provider.eventsByDate("2026-06-21")).resolves.toEqual([event]);
-    await expect(provider.liveEvents()).resolves.toEqual([event]);
-    await expect(provider.eventById("event-1")).resolves.toEqual(event);
-    expect(secondary.eventsByDate).toHaveBeenCalledOnce();
-    expect(secondary.liveEvents).toHaveBeenCalledOnce();
-    expect(secondary.eventById).toHaveBeenCalledOnce();
-  });
-
-  it("uses the secondary provider when the primary has no usable content", async () => {
-    const primary: SportsProvider = {
-      name: "primary",
-      eventsByDate: vi.fn(async () => []),
-      liveEvents: vi.fn(async () => []),
-      eventById: vi.fn(async () => undefined),
-    };
-    const secondary: SportsProvider = {
-      name: "secondary",
-      eventsByDate: vi.fn(async () => [event]),
-      liveEvents: vi.fn(async () => [event]),
-      eventById: vi.fn(async () => event),
-    };
-    const provider = new FallbackSportsProvider(primary, secondary);
-
-    await expect(provider.eventsByDate("2026-06-21")).resolves.toEqual([event]);
-    await expect(provider.liveEvents()).resolves.toEqual([event]);
-    await expect(provider.eventById("event-1")).resolves.toEqual(event);
-  });
-
-  it("does not call the secondary provider when the primary has content", async () => {
-    const secondaryEvents = vi.fn(async () => [event]);
-    const secondaryLiveEvents = vi.fn(async () => [event]);
-    const secondaryEvent = vi.fn(async () => event);
-    const provider = new FallbackSportsProvider(
-      { name: "primary", eventsByDate: async () => [event], liveEvents: async () => [event], eventById: async () => event },
-      { name: "secondary", eventsByDate: secondaryEvents, liveEvents: secondaryLiveEvents, eventById: secondaryEvent },
-    );
-
-    await provider.eventsByDate("2026-06-21");
-    await provider.liveEvents();
-    await provider.eventById("event-1");
-    expect(secondaryEvents).not.toHaveBeenCalled();
-    expect(secondaryLiveEvents).not.toHaveBeenCalled();
-    expect(secondaryEvent).not.toHaveBeenCalled();
   });
 });
 
@@ -112,89 +92,77 @@ describe("ResilientHttpClient", () => {
   });
 });
 
-describe("TheSportsDbProvider", () => {
-  it("tolerates empty optional URLs from the upstream API", async () => {
-    const payload = JSON.stringify({ events: [{
-      idEvent: "event-1", strTimestamp: "2026-06-21T12:00:00Z", strSport: "Soccer", idLeague: "league-1",
-      strLeague: "League", idHomeTeam: "home", strHomeTeam: "Home", idAwayTeam: "away", strAwayTeam: "Away",
-      strLeagueBadge: "", strHomeTeamBadge: "", strAwayTeamBadge: "", strVideo: "",
-    }] });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } }));
-    const events = await new TheSportsDbProvider("test", new ResilientHttpClient()).eventsByDate("2026-06-21");
-    expect(events[0]).toMatchObject({ id: "event-1", status: "scheduled" });
-    expect(events[0].homeTeam.badgeUrl).toBeUndefined();
-    // Only Soccer is queried now (football-only platform)
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get("s"))).toEqual(["Soccer"]);
+describe("SportSRC V2 provider", () => {
+  it("uses the official query contract and normalizes grouped matches", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(listPayload()), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    const events = await new SportSrcProvider("license-key").eventsByDate("2026-06-21");
+    expect(events[0]).toMatchObject({
+      id: "sportsrc-match-42",
+      sport: "Football",
+      status: "finished",
+      homeScore: 2,
+      awayScore: 1,
+      competition: { name: "World Cup", region: "International" },
+      homeTeam: { name: "Brasil" },
+      awayTeam: { name: "Argentina" },
+    });
+    const [request, options] = fetchMock.mock.calls[0];
+    const url = new URL(String(request));
+    expect(url.origin + url.pathname).toBe("https://api.sportsrc.org/v2/");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ type: "matches", sport: "football", date: "2026-06-21" });
+    expect(options?.headers).toEqual(expect.objectContaining({ "X-API-KEY": "license-key" }));
     fetchMock.mockRestore();
   });
 
-  it("does not request IDs owned by SportsDataIO", async () => {
+  it("requests live matches with one inprogress query", async () => {
+    const liveMatch = { ...sportSrcMatch, status: "inprogress", status_detail: "Halftime" };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(listPayload(liveMatch)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    const events = await new SportSrcProvider("license-key").liveEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0].status).toBe("halftime");
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(Object.fromEntries(url.searchParams)).toEqual({ type: "matches", sport: "football", status: "inprogress" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    fetchMock.mockRestore();
+  });
+
+  it("uses the detail endpoint for SportSRC IDs", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: {
+        match_info: { ...sportSrcMatch, league: sportSrcLeague },
+        info: { venue: { name: "Arena Nacional" } },
+        sources: [],
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const detail = await new SportSrcProvider("license-key").eventById("sportsrc-match-42");
+    expect(detail).toMatchObject({ id: "sportsrc-match-42", venue: "Arena Nacional" });
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(Object.fromEntries(url.searchParams)).toEqual({ type: "detail", id: "match-42" });
+    fetchMock.mockRestore();
+  });
+
+  it("does not request foreign IDs and rejects invalid dates", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
-    await expect(new TheSportsDbProvider("test").eventById("sportsdata-42")).resolves.toBeUndefined();
+    const provider = new SportSrcProvider("license-key");
+    await expect(provider.eventById("other-42")).resolves.toBeUndefined();
+    expect(() => provider.eventsByDate("21-06-2026")).toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
     fetchMock.mockRestore();
   });
 
-  it("normalizes provider in-play status codes from the date endpoint", async () => {
-    const payload = JSON.stringify({ events: [{
-      idEvent: "basketball-live", strTimestamp: "2026-06-21T12:00:00Z", strSport: "Basketball", idLeague: "league-1",
-      strLeague: "League", idHomeTeam: "home", strHomeTeam: "Home", idAwayTeam: "away", strAwayTeam: "Away",
-      intHomeScore: 10, intAwayScore: 8, strStatus: "Q2",
-    }] });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } }));
-    const events = await new TheSportsDbProvider("test", new ResilientHttpClient()).eventsByDate("2026-06-21");
-    expect(events.find((item) => item.id === "basketball-live")).toMatchObject({ status: "live", statusLabel: "Q2" });
-    fetchMock.mockRestore();
-  });
-
-  it("uses the v2 live score endpoint when a premium key is configured", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ livescore: [{
-      idEvent: "live-1", dateEvent: "2026-06-21", strEventTime: "12:00:00", strSport: "Soccer", idLeague: "league-1",
-      strLeague: "League", idHomeTeam: "home", strHomeTeam: "Home", idAwayTeam: "away", strAwayTeam: "Away",
-      intHomeScore: "1", intAwayScore: "0", strProgress: "63:12 - 2nd",
-    }] }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const events = await new TheSportsDbProvider("premium-key", new ResilientHttpClient()).liveEvents();
-    expect(events[0]).toMatchObject({ id: "live-1", status: "live", statusLabel: "63:12 - 2nd", homeScore: 1 });
-    const [, options] = fetchMock.mock.calls[0];
-    expect(options?.headers).toMatchObject({ "X-API-KEY": "premium-key" });
-    fetchMock.mockRestore();
-  });
-});
-
-describe("SportsDataIO provider", () => {
-  it("uses the subscription header and normalizes games", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([{
-      GameId: 42,
-      DateTime: "2026-06-21T18:30:00",
-      Status: "Final",
-      HomeTeamId: 10,
-      HomeTeamKey: "BRA",
-      AwayTeamId: 20,
-      AwayTeamKey: "ARG",
-      HomeTeamScore: 2,
-      AwayTeamScore: 1,
-      CompetitionId: 5,
-      CompetitionName: "World Cup",
-      VenueName: "Arena",
-    }]), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const provider = new SportSrcProvider("https://api.sportsdata.io/v3/soccer/scores/json", "secret");
-    const events = await provider.eventsByDate("2026-06-21");
-    expect(events[0]).toMatchObject({ id: "sportsdata-42", status: "finished", homeScore: 2, awayScore: 1, sport: "Soccer" });
-    const [url, options] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("GamesByDate/2026-JUN-21");
-    expect(options?.headers).toMatchObject({ "Ocp-Apim-Subscription-Key": "secret" });
-    fetchMock.mockRestore();
-  });
-
-  it("formats dates using the API contract", () => {
-    expect(formatSportsDataDate("2026-01-09")).toBe("2026-JAN-09");
-  });
-
-  it("does not request IDs owned by TheSportsDB", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-    await expect(new SportSrcProvider("https://api.sportsdata.io/v3/soccer/scores/json", "secret").eventById("12345")).resolves.toBeUndefined();
-    expect(fetchMock).not.toHaveBeenCalled();
-    fetchMock.mockRestore();
+  it("maps every documented lifecycle state", () => {
+    expect(normalizeSportSrcStatus("inprogress", "1st half")).toBe("live");
+    expect(normalizeSportSrcStatus("inprogress", "Halftime")).toBe("halftime");
+    expect(normalizeSportSrcStatus("interrupted", "Interrupted")).toBe("paused");
+    expect(normalizeSportSrcStatus("postponed", "Postponed")).toBe("postponed");
+    expect(normalizeSportSrcStatus("finished", "Ended")).toBe("finished");
+    expect(normalizeSportSrcStatus("notstarted", "Upcoming")).toBe("scheduled");
   });
 });

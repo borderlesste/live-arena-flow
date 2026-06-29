@@ -230,7 +230,7 @@ const HomePage = () => {
         </div>
         <div>
           <div className="surface-card rounded-xl p-6">
-            <p className="text-xs uppercase tracking-wider text-primary">TheSportsDB</p>
+            <p className="text-xs uppercase tracking-wider text-primary">SportSRC</p>
             <p className="mt-1 font-display text-xl font-bold">Datos deportivos conectados</p>
             <p className="mt-2 text-sm text-muted-foreground">{bundle.matches.length} eventos, {bundle.teams.length} equipos y {bundle.competitions.length} competiciones cargados desde la API.</p>
           </div>

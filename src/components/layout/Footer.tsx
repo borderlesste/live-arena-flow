@@ -72,7 +72,7 @@ export function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row md:items-center">
-          <p>© {new Date().getFullYear()} Luis Romero Fútbol. Datos deportivos suministrados por TheSportsDB.</p>
+          <p>© {new Date().getFullYear()} Luis Romero Fútbol. Datos deportivos suministrados por SportSRC.</p>
           <p>Hecho con pasión por el deporte.</p>
         </div>
       </div>

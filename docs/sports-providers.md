@@ -1,8 +1,8 @@
-# Sports Providers
+# SportSRC Provider
 
 ## Active Contract
 
-The backend exposes normalized sports data through `server/modules/sports`.
+The backend exposes normalized SportSRC V2 data through `server/modules/sports`. The frontend consumes only `/api/sports/events`, `/api/sports/live`, and `/api/sports/events/:id`; it never receives the license key or provider-native envelopes.
 
 ```ts
 interface SportsProvider {
@@ -13,33 +13,25 @@ interface SportsProvider {
 }
 ```
 
-The frontend consumes only `/api/sports/events`, `/api/sports/live`, and `/api/sports/events/:id`.
+## Data Matrix
 
-## Provider Matrix
+| Data | SportSRC V2 query | Cache |
+| --- | --- | --- |
+| Matches and results | `type=matches&sport=football&date=YYYY-MM-DD` | 5 minutes |
+| Live matches | `type=matches&sport=football&status=inprogress` | 60 seconds |
+| Match detail | `type=detail&id={match_id}` | No list cache |
+| Teams and leagues | Derived from grouped match payloads | Same as matches |
+| Managed OBS streams | Application data, independent from provider embeds | N/A |
 
-| Dato | API principal | API secundaria | Persistencia | Cache |
-| --- | --- | --- | --- | --- |
-| Deportes | Provider event payload | Fallback provider | Not persisted yet | In-memory request cache |
-| Competiciones | Provider event payload | Fallback provider | Not persisted yet | In-memory request cache |
-| Equipos | Provider event payload | Fallback provider | Not persisted yet | In-memory request cache |
-| Logos | Provider event payload | Fallback provider | Not persisted yet | In-memory request cache |
-| Partidos | SportsDataIO or TheSportsDB | Fallback provider | Not persisted yet | 5 minutes by date |
-| En vivo | Dedicated provider live endpoint when configured, otherwise date-window filter | Fallback provider | Not persisted yet | 60 seconds |
-| Resultados | Date endpoint | Fallback provider | Not persisted yet | 5 minutes by date |
-| Estadisticas | Not implemented | Not implemented | None | None |
-| Alineaciones | Not implemented | Not implemented | None | None |
-| Streams | Admin-managed app data | N/A | JSON fallback; Supabase target pending | None |
+## Security
 
-## Current Decisions
-
-- SportsDataIO/SportSRC is the preferred production primary only when `SPORTSRC_BASE_URL` and `SPORTSRC_API_KEY` are valid.
-- TheSportsDB is a safe fallback and the default development provider.
-- TheSportsDB public key fallback is development-only; production now requires a configured sports provider.
-- The frontend is insulated from provider-native field names.
+- `SPORTSRC_API_KEY` is server-only and sent using `X-API-KEY`.
+- The base URL is fixed to `https://api.sportsrc.org/v2/` to prevent configuration drift and SSRF.
+- The backend validates every provider response before normalization.
+- Run `npm run sportsrc:check -- YYYY-MM-DD` after changing the license.
 
 ## Pending Hardening
 
-- Persist normalized match snapshots in Supabase to reduce provider quota pressure.
-- Add provider health and quota metrics to admin diagnostics.
-- Store provider source metadata and external IDs to prevent duplicates across providers.
-- Add scheduled sync jobs only after deployment ownership is chosen.
+- Persist normalized match snapshots in Supabase to reduce quota usage.
+- Add account quota metrics without exposing license or account identity.
+- Add scheduled synchronization only after deployment ownership is defined.
