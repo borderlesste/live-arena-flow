@@ -5,7 +5,7 @@ import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 const API_BASE = publicEnv.NEXT_PUBLIC_API_BASE_URL;
 const TOKEN_KEY = "arena-live:session-token";
 
-export type AppRole = "super_admin" | "admin" | "moderator" | "user";
+export type AppRole = "super_admin" | "admin" | "stream_operator" | "moderator" | "user";
 
 export interface UserPreferences {
   matchReminders: boolean;
@@ -77,7 +77,7 @@ async function supabaseProfile(): Promise<UserProfile> {
       roles = nextRoles;
     }
   }
-  const roleOrder: AppRole[] = ["super_admin", "admin", "moderator", "user"];
+  const roleOrder: AppRole[] = ["super_admin", "admin", "stream_operator", "moderator", "user"];
   const assigned = new Set((roles ?? []).map((item) => item.role as AppRole));
   const role = roleOrder.find((candidate) => assigned.has(candidate)) ?? "user";
   return {

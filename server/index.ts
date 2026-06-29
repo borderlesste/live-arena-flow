@@ -13,7 +13,7 @@ import { embedUrlSchema, mediaUrlSchema } from "../src/schemas/stream.schema.js"
 import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.schema.js";
 import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorLegacyColumns, sponsorToLegacyRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
 import { getLiveStreamProvider } from "./modules/streaming/index.js";
-import { CloudflareStreamProvider } from "./modules/streaming/cloudflare.provider.js";
+import { CloudflareStreamProvider, getCloudflareStreamConfig } from "./modules/streaming/cloudflare.provider.js";
 import { buildWebhookEventKey, mapCloudflareEventToStatus, validateWebhookSecret } from "./modules/streaming/webhook.js";
 import {
   cloudflareLiveWebhookSchema,
@@ -29,6 +29,7 @@ const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN?.trim();
 const STREAM_SECRET_KEY = process.env.STREAM_SECRET_KEY || "";
 const LEGACY_AUTH_ENABLED = process.env.NODE_ENV !== "production" && process.env.LEGACY_AUTH_ENABLED !== "false";
 const chatRateLimit = new Map<string, number>();
+const sensitiveActionRateLimit = new Map<string, { count: number; resetAt: number }>();
 const scryptAsync = promisify(scrypt);
 const sportsProvider = createSportsProvider();
 const VERSION = process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "local";
@@ -48,9 +49,13 @@ if (process.env.NODE_ENV === "production" && STREAM_SECRET_KEY.length < 32) {
 if (process.env.NODE_ENV === "production" && (!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) || !selectSupabasePublicKey())) {
   throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required in production");
 }
+if (process.env.NODE_ENV === "production" && !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() && !process.env.SUPABASE_SECRET_KEY?.trim()) {
+  throw new Error("SUPABASE_SERVICE_ROLE_KEY is required in production");
+}
 
 // Validate Cloudflare Stream config when that provider is selected
 if ((process.env.STREAM_PROVIDER || "custom").toLowerCase() === "cloudflare") {
+  getCloudflareStreamConfig();
   if (!process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) {
     throw new Error("[startup] CLOUDFLARE_ACCOUNT_ID is required when STREAM_PROVIDER=cloudflare");
   }
@@ -143,6 +148,7 @@ const profileSchema = z.object({
   preferences: z.object({ matchReminders: z.boolean() }),
 });
 const favoriteMatchIdSchema = z.string().trim().min(1).max(160);
+const liveSourceIdSchema = z.string().uuid();
 const brandAssetSchema = z.string().trim().min(1).max(500).refine((value) => value.startsWith("/") || URL.canParse(value), "Ruta de asset inválida");
 const brandSettingsSchema = z.object({
   platformName: z.string().trim().min(2).max(80),
@@ -160,6 +166,20 @@ const brandSettingsSchema = z.object({
 
 function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function allowSensitiveAction(request: IncomingMessage, action: string, limit: number, windowMs: number): boolean {
+  const credential = request.headers.authorization || request.socket.remoteAddress || "anonymous";
+  const key = createHash("sha256").update(`${action}:${credential}`).digest("hex");
+  const now = Date.now();
+  const current = sensitiveActionRateLimit.get(key);
+  if (!current || current.resetAt <= now) {
+    sensitiveActionRateLimit.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
 }
 
 async function passwordHash(password: string, salt: string): Promise<string> {
@@ -230,7 +250,7 @@ function decryptSecret(value: string): string {
     return decrypted.toString("utf8");
   } catch {
     console.error("Decryption failed");
-    return value;
+    return "";
   }
 }
 
@@ -318,6 +338,8 @@ interface LiveSourceRow {
   updated_at: string;
   last_connected_at: string | null;
   last_disconnected_at: string | null;
+  last_provider_sync_at?: string | null;
+  provider_error_code?: string | null;
   idempotency_key?: string | null;
   idempotency_fingerprint?: string | null;
 }
@@ -355,6 +377,8 @@ function liveSourceFromRow(row: LiveSourceRow): StoredVideoSource {
     updatedAt: row.updated_at,
     lastConnectedAt: row.last_connected_at ?? undefined,
     lastDisconnectedAt: row.last_disconnected_at ?? undefined,
+    lastProviderSyncAt: row.last_provider_sync_at ?? undefined,
+    providerErrorCode: row.provider_error_code ?? undefined,
     idempotencyKey: row.idempotency_key ?? undefined,
     idempotencyFingerprint: row.idempotency_fingerprint ?? undefined,
     obs: row.source_kind === "obs" && row.ingest_protocol && row.ingest_url ? {
@@ -395,6 +419,8 @@ function liveSourceToRow(source: StoredVideoSource) {
     updated_at: new Date().toISOString(),
     last_connected_at: source.lastConnectedAt || null,
     last_disconnected_at: source.lastDisconnectedAt || null,
+    last_provider_sync_at: source.lastProviderSyncAt || null,
+    provider_error_code: source.providerErrorCode || null,
     deleted_at: null,
     idempotency_key: source.idempotencyKey || null,
     idempotency_fingerprint: source.idempotencyFingerprint || null,
@@ -431,6 +457,11 @@ async function isAdmin(request: IncomingMessage): Promise<boolean> {
   return hasSupabaseRole(request, ["super_admin", "admin"]);
 }
 
+async function canManageLiveSources(request: IncomingMessage): Promise<boolean> {
+  if (process.env.NODE_ENV !== "production" && ADMIN_TOKEN && request.headers.authorization === `Bearer ${ADMIN_TOKEN}`) return true;
+  return hasSupabaseRole(request, ["super_admin", "admin", "stream_operator"]);
+}
+
 class RequestBodyError extends Error {
   constructor(readonly status: 400 | 413, message: string) {
     super(message);
@@ -465,8 +496,16 @@ function hasSafePlayback(source: StoredVideoSource): boolean {
 }
 
 function publicVideoSources(sources: StoredVideoSource[]) {
-  return sources
-    .filter((source) => source.isEnabled !== false && hasSafePlayback(source))
+  const candidates = sources.filter((source) => source.isEnabled !== false && hasSafePlayback(source));
+  const selectedByMatch = new Map<string, StoredVideoSource>();
+  for (const source of candidates) {
+    const selected = selectedByMatch.get(source.matchId);
+    if (!selected || (source.isPrimary === true && selected.isPrimary !== true)) {
+      selectedByMatch.set(source.matchId, source);
+    }
+  }
+
+  return [...selectedByMatch.values()]
     .map(({ obs: _obs, streamKeyCiphertext: _cipher, streamKeyIv: _iv, ...source }) => {
       if (source.sourceKind === "obs") {
         return {
@@ -834,6 +873,10 @@ async function handleCollection(
 }
 
 const server = createServer(async (request, response) => {
+  const requestId = typeof request.headers["x-request-id"] === "string"
+    ? request.headers["x-request-id"].slice(0, 100)
+    : crypto.randomUUID();
+  response.setHeader("X-Request-Id", requestId);
   setCors(request, response);
   if (request.method === "OPTIONS") return response.writeHead(204).end();
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
@@ -949,7 +992,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/live-sources") {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
       if (canUseAdminSupabase()) {
         const { data, error } = await getAdminSupabaseClient()
           .from("live_sources")
@@ -974,7 +1017,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/live-sources/status") {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
       
       let sourcesList: StoredVideoSource[] = [];
       if (canUseAdminSupabase()) {
@@ -1013,11 +1056,21 @@ const server = createServer(async (request, response) => {
       
       for (const item of statuses) {
         const src = sourcesList.find((s) => s.id === item.id);
-        if (src && src.status !== item.status) {
+        if (src) {
+          const syncedAt = new Date().toISOString();
           src.status = item.status;
-          src.updatedAt = new Date().toISOString();
+          src.updatedAt = syncedAt;
+          src.lastProviderSyncAt = syncedAt;
+          if (item.status === "live") src.lastConnectedAt = syncedAt;
+          if (item.status === "disconnected") src.lastDisconnectedAt = syncedAt;
           if (canUseAdminSupabase()) {
-            await getAdminSupabaseClient().from("live_sources").update({ status: item.status, updated_at: src.updatedAt }).eq("id", item.id);
+            await getAdminSupabaseClient().from("live_sources").update({
+              status: item.status,
+              updated_at: syncedAt,
+              last_provider_sync_at: syncedAt,
+              ...(item.status === "live" ? { last_connected_at: syncedAt } : {}),
+              ...(item.status === "disconnected" ? { last_disconnected_at: syncedAt } : {}),
+            }).eq("id", item.id);
           }
         }
       }
@@ -1036,8 +1089,9 @@ const server = createServer(async (request, response) => {
 
     const credentialsRevealMatch = url.pathname.match(/^\/api\/admin\/live-sources\/([^/]+)\/credentials\/reveal$/);
     if (request.method === "POST" && credentialsRevealMatch) {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const id = credentialsRevealMatch[1];
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      if (!allowSensitiveAction(request, "reveal_credentials", 5, 60_000)) return json(response, 429, { error: "Demasiadas solicitudes" });
+      const id = liveSourceIdSchema.parse(credentialsRevealMatch[1]);
 
       let currentSource: StoredVideoSource | undefined;
       if (canUseAdminSupabase()) {
@@ -1090,8 +1144,9 @@ const server = createServer(async (request, response) => {
 
     const credentialsRotateMatch = url.pathname.match(/^\/api\/admin\/live-sources\/([^/]+)\/credentials\/rotate$/);
     if (request.method === "POST" && credentialsRotateMatch) {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const id = credentialsRotateMatch[1];
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      if (!allowSensitiveAction(request, "rotate_credentials", 3, 60_000)) return json(response, 429, { error: "Demasiadas solicitudes" });
+      const id = liveSourceIdSchema.parse(credentialsRotateMatch[1]);
 
       let currentSource: StoredVideoSource | undefined;
       if (canUseAdminSupabase()) {
@@ -1120,6 +1175,8 @@ const server = createServer(async (request, response) => {
         const replacement = currentSource.provider === "cloudflare_stream"
           ? await provider.createLiveInput({
               name: currentSource.title,
+              eventId: currentSource.matchId,
+              sourceId: currentSource.id,
               recordingEnabled: currentSource.recordingEnabled,
               lowLatencyEnabled: currentSource.lowLatencyEnabled,
             })
@@ -1205,8 +1262,8 @@ const server = createServer(async (request, response) => {
 
     const liveSourceEnableMatch = url.pathname.match(/^\/api\/admin\/live-sources\/([^/]+)\/(enable|disable)$/);
     if (request.method === "POST" && liveSourceEnableMatch) {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const id = liveSourceEnableMatch[1];
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      const id = liveSourceIdSchema.parse(liveSourceEnableMatch[1]);
       const action = liveSourceEnableMatch[2];
       const enable = action === "enable";
 
@@ -1258,7 +1315,8 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/api/admin/live-sources") {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      if (!allowSensitiveAction(request, "create_live_source", 10, 60_000)) return json(response, 429, { error: "Demasiadas solicitudes" });
       const body = createLiveSourceSchema.parse(await readBody(request));
       const idempotencyKey = z.string().uuid().parse(request.headers["idempotency-key"]);
       const fingerprint = createHash("sha256").update(JSON.stringify(body)).digest("hex");
@@ -1346,26 +1404,34 @@ const server = createServer(async (request, response) => {
       try {
         liveInput = await provider.createLiveInput({
           name: newSource.title,
+          eventId: newSource.matchId,
+          sourceId: newSource.id,
           recordingEnabled: newSource.recordingEnabled,
           lowLatencyEnabled: newSource.lowLatencyEnabled,
         });
       } catch {
         if (canUseAdminSupabase()) {
           await getAdminSupabaseClient().from("live_sources").update({
-            status: "provider_error",
+            status: "provision_failed",
             provider_error_code: "LIVE_INPUT_CREATE_FAILED",
           }).eq("id", id);
         } else {
           await updateStore((data) => {
             const source = data.videoSources.find((item) => item.id === id);
             if (source) {
-              source.status = "provider_error";
+              source.status = "provision_failed";
               source.statusMessage = "LIVE_INPUT_CREATE_FAILED";
             }
           });
         }
         await logAudit(request, "create_live_source", id, "failure", null, { code: "LIVE_INPUT_CREATE_FAILED" });
-        return json(response, 502, { error: "No fue posible crear la entrada de transmisión" });
+        return json(response, 502, {
+          error: {
+            code: "CLOUDFLARE_LIVE_INPUT_CREATE_FAILED",
+            message: "No fue posible crear la entrada de transmisión.",
+            requestId,
+          },
+        });
       }
 
       newSource.provider = liveInput.provider;
@@ -1430,8 +1496,8 @@ const server = createServer(async (request, response) => {
 
     const liveSourceDetailMatch = url.pathname.match(/^\/api\/admin\/live-sources\/([^/]+)$/);
     if (request.method === "GET" && liveSourceDetailMatch) {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const id = liveSourceDetailMatch[1];
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      const id = liveSourceIdSchema.parse(liveSourceDetailMatch[1]);
       if (canUseAdminSupabase()) {
         const { data, error } = await getAdminSupabaseClient()
           .from("live_sources")
@@ -1451,8 +1517,8 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "PATCH" && liveSourceDetailMatch) {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const id = liveSourceDetailMatch[1];
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      const id = liveSourceIdSchema.parse(liveSourceDetailMatch[1]);
       const body = updateLiveSourceSchema.parse(await readBody(request));
 
       let currentSource: StoredVideoSource | undefined;
@@ -1524,8 +1590,8 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "DELETE" && liveSourceDetailMatch) {
-      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
-      const id = liveSourceDetailMatch[1];
+      if (!await canManageLiveSources(request)) return json(response, 403, { error: "No autorizado" });
+      const id = liveSourceIdSchema.parse(liveSourceDetailMatch[1]);
 
       let currentSource: StoredVideoSource | undefined;
       if (canUseAdminSupabase()) {
@@ -1829,7 +1895,7 @@ const server = createServer(async (request, response) => {
       const parsed = cloudflareLiveWebhookSchema.safeParse(await readBody(request));
       if (!parsed.success) return json(response, 400, { error: "Payload de webhook inválido" });
 
-      const { input_id: inputUid, event_type: eventType, updated_at: updatedAt } = parsed.data.data;
+      const { input_id: inputUid, event_type: eventType, updated_at: updatedAt, error_code: errorCode } = parsed.data.data;
       const newStatus = mapCloudflareEventToStatus(eventType);
       if (!newStatus) return json(response, 200, { ok: true }); // unknown event — ignore gracefully
 
@@ -1844,7 +1910,7 @@ const server = createServer(async (request, response) => {
         p_event_type: eventType,
         p_status: newStatus,
         p_updated_at: updatedAt,
-        p_error_code: newStatus === "provider_error" ? "CLOUDFLARE_STREAM_ERRORED" : null,
+        p_error_code: newStatus === "provider_error" ? errorCode || "CLOUDFLARE_STREAM_ERRORED" : null,
       });
       if (error) return json(response, 500, { error: "No se pudo procesar el evento" });
 

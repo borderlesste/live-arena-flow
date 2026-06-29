@@ -23,8 +23,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const auth = useAuth();
   const canAdmin = auth.profile?.role === "super_admin" || auth.profile?.role === "admin";
+  const canManageStreams = canAdmin || auth.profile?.role === "stream_operator";
 
-  if (!canAdmin) return <>{children}</>;
+  if (!canManageStreams) return <>{children}</>;
+
+  const visibleItems = canAdmin ? items : items.filter((item) => item.to === "/admin/streams");
 
   return (
     <div className={cn("container mx-auto grid gap-6 px-4 py-6 md:px-6 lg:grid-cols-[240px_minmax(0,1fr)]", collapsed && "lg:grid-cols-[80px_minmax(0,1fr)]")}>
@@ -33,7 +36,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <BrandLogo variant="white" size={collapsed ? "md" : "sm"} withWordmark={!collapsed} decorative />
         </div>
         <nav className="mt-3 space-y-1" aria-label="Administración">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

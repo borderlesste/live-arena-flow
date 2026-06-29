@@ -9,13 +9,16 @@ export const liveSourceStatusSchema = z.enum([
   "provisioning",
   "waiting_signal",
   "ready",
+  "connecting",
   "live",
   "reconnecting",
   "disconnected",
   "disabled",
+  "provision_failed",
   "provider_error",
   "deletion_pending",
   "deletion_failed",
+  "deleted",
 ]);
 
 export type LiveSourceStatus = z.infer<typeof liveSourceStatusSchema>;
@@ -59,9 +62,10 @@ export const updateLiveSourceSchema = z.object({
 
 export const cloudflareLiveWebhookSchema = z.object({
   data: z.object({
-    input_id: z.string().min(1),
-    event_type: z.string().min(1),
+    input_id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+    event_type: z.enum(["live_input.connected", "live_input.disconnected", "live_input.errored"]),
     updated_at: z.string().datetime(),
+    error_code: z.string().trim().regex(/^[a-zA-Z0-9_.:-]{1,120}$/).optional(),
   }),
   ts: z.number().optional(),
 }).passthrough();

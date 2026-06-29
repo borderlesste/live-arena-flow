@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { IncomingMessage } from "node:http";
 import { selectSupabasePublicKey } from "./supabase-key.js";
 
-export type AppRole = "super_admin" | "admin" | "moderator" | "user";
+export type AppRole = "super_admin" | "admin" | "stream_operator" | "moderator" | "user";
 
 export function bearerToken(request: IncomingMessage): string | undefined {
   return request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1];

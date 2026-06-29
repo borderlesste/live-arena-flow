@@ -8,8 +8,8 @@ This document lists names and responsibilities only. Do not commit real values.
 | --- | ---: | --- |
 | `NEXT_PUBLIC_APP_URL` | Recommended | Used for metadata and public links. |
 | `NEXT_PUBLIC_API_BASE_URL` | Recommended | Defaults to `/api`. |
-| `NEXT_PUBLIC_SUPABASE_URL` | Required for Supabase auth | Browser-safe project URL. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Required for Supabase auth | Modern browser-safe publishable key (`sb_publishable_…`). |
+| `NEXT_PUBLIC_SUPABASE_URL` | Required for Supabase auth | Browser-safe project URL. During `next build`, `SUPABASE_URL` is used as fallback if this variable is omitted. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Required for Supabase auth | Browser-safe publishable key. Accepts modern `sb_publishable_…` and legacy public `anon` JWTs that are still valid. |
 
 ## Backend / Render
 
@@ -19,13 +19,16 @@ This document lists names and responsibilities only. Do not commit real values.
 | `APP_ORIGIN` | Required outside local defaults | Exact CORS origin. |
 | `API_INTERNAL_URL` | Required by Next/Vercel | Backend origin for rewrites. |
 | `SUPABASE_URL` | Production | Server-side Supabase URL. |
-| `SUPABASE_PUBLISHABLE_KEY` | Production | Modern publishable key used for token verification and user profile repair. |
+| `SUPABASE_PUBLISHABLE_KEY` | Production | Public Supabase key used for token verification, profile repair and as build-time fallback for the browser when `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is omitted. Accepts modern `sb_publishable_…` and legacy public `anon` JWTs that are still valid. |
 | `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` | Admin metrics/features | Server only. |
 | `STREAM_SECRET_KEY` | Production | At least 32 characters; encrypts OBS stream keys. |
 | `STREAM_PROVIDER` | Streaming | `custom` or `cloudflare`. |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Server only. |
 | `CLOUDFLARE_STREAM_API_TOKEN` | Cloudflare | Server-only token with Stream Write. |
 | `CLOUDFLARE_STREAM_CUSTOMER_CODE` | Cloudflare playback | Builds the public HLS hostname. |
+| `CLOUDFLARE_STREAM_RECORDING_MODE` | Cloudflare playback | Use `automatic` when the Live Input must be viewable through HLS. `off` accepts ingest but does not publish HLS playback. |
+| `CLOUDFLARE_STREAM_ALLOWED_ORIGINS` | Cloudflare playback | Comma-separated hostnames allowed to load the stream; do not include schemes or paths. |
+| `CLOUDFLARE_STREAM_API_TIMEOUT_MS` | Cloudflare | Backend request timeout, from 1000 to 60000 ms. |
 | `CLOUDFLARE_STREAM_WEBHOOK_SECRET` | Cloudflare production | At least 32 characters; rotate the previously exposed value. |
 | `ADMIN_API_TOKEN` | Dev/test only | Disabled as a production admin shortcut. |
 | `LEGACY_AUTH_ENABLED` | Dev only | Must stay false in production. |
@@ -58,4 +61,5 @@ This document lists names and responsibilities only. Do not commit real values.
 - Production must configure Supabase auth variables.
 - Production must configure `STREAM_SECRET_KEY` with at least 32 characters.
 - Cloudflare production must configure a webhook secret with at least 32 characters.
+- Cloudflare HLS playback requires `CLOUDFLARE_STREAM_RECORDING_MODE=automatic`.
 - Frontend variables must never contain service-role, provider, ingest, or admin secrets.

@@ -27,6 +27,10 @@ export function SourceStatusBadge({ status, className }: StatusBadgeProps) {
       label: "Esperando señal",
       className: "bg-info/15 text-info hover:bg-info/20 border-info/20 animate-pulse",
     },
+    connecting: {
+      label: "Conectando",
+      className: "bg-info/15 text-info hover:bg-info/20 border-info/20 animate-pulse",
+    },
     reconnecting: {
       label: "Reconectando",
       className: "bg-info/15 text-info hover:bg-info/20 border-info/20 animate-pulse",
@@ -44,6 +48,10 @@ export function SourceStatusBadge({ status, className }: StatusBadgeProps) {
       label: "Deshabilitado",
       className: "bg-muted text-muted-foreground hover:bg-muted/80 border-border opacity-60",
     },
+    provision_failed: {
+      label: "Error de aprovisionamiento",
+      className: "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/20",
+    },
     provider_error: {
       label: "Error",
       className: "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/20",
@@ -55,6 +63,10 @@ export function SourceStatusBadge({ status, className }: StatusBadgeProps) {
     deletion_failed: {
       label: "Error al eliminar",
       className: "bg-destructive/15 text-destructive hover:bg-destructive/20 border-destructive/20",
+    },
+    deleted: {
+      label: "Eliminado",
+      className: "bg-muted text-muted-foreground border-border opacity-60",
     },
   };
 

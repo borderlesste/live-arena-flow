@@ -94,7 +94,7 @@ const AdminPage = () => {
   // ── OBS form state ────────────────────────────────────────────────────────
   const [obsEnabled, setObsEnabled] = useState(false);
   const [obsProtocol, setObsProtocol] = useState<"rtmp" | "rtmps" | "srt">("rtmps");
-  const [recordingEnabled, setRecordingEnabled] = useState(false);
+  const [recordingEnabled, setRecordingEnabled] = useState(true);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
 
   // ── Create button state (for progressive UI) ──────────────────────────────
@@ -130,7 +130,9 @@ const AdminPage = () => {
   );
   const token = getSessionToken() ?? "";
   const canAdmin =
-    auth.profile?.role === "super_admin" || auth.profile?.role === "admin";
+    auth.profile?.role === "super_admin" ||
+    auth.profile?.role === "admin" ||
+    auth.profile?.role === "stream_operator";
 
   // ── Load sources ──────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -202,7 +204,7 @@ const AdminPage = () => {
     setPlaybackUrl("");
     setObsEnabled(false);
     setObsProtocol("rtmps");
-    setRecordingEnabled(false);
+    setRecordingEnabled(true);
     setLowLatencyEnabled(false);
     setRevealedKey(null);
     setIsEditing(false);
@@ -438,6 +440,8 @@ const AdminPage = () => {
   const handleObsEnabledChange = (val: boolean) => {
     setObsEnabled(val);
     if (val) {
+      setObsProtocol("rtmps");
+      setRecordingEnabled(true);
       setPurpose("live");
       setFormat("hls");
       setPlaybackUrl("");

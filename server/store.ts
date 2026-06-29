@@ -41,6 +41,8 @@ export interface StoredVideoSource {
   lowLatencyEnabled?: boolean;
   lastConnectedAt?: string;
   lastDisconnectedAt?: string;
+  lastProviderSyncAt?: string;
+  providerErrorCode?: string;
   updatedAt?: string;
   idempotencyKey?: string;
   idempotencyFingerprint?: string;

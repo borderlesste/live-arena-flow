@@ -27,6 +27,8 @@ export interface ManagedVideoSource extends StreamSource {
   updatedAt?: string;
   lastConnectedAt?: string;
   lastDisconnectedAt?: string;
+  lastProviderSyncAt?: string;
+  providerErrorCode?: string;
   obs?: StreamSource["obs"] & { hasStreamKey?: boolean };
 }
 

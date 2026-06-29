@@ -64,7 +64,7 @@ async function main() {
   const projectRef = refMatch?.[1];
 
   console.log(`\n🔗  Proyecto Supabase: ${projectRef || "(desconocido)"}`);
-  console.log(`🔑  Service role key: ...${serviceRoleKey.slice(-8)}\n`);
+  console.log("🔑  Service role key: configurada\n");
 
   // Read migrations sorted
   const migrationsDir = resolve(__dirname, "../supabase/migrations");

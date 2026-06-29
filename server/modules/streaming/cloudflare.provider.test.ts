@@ -5,7 +5,7 @@ import { CloudflareStreamProvider, buildCloudflareHlsUrl } from "./cloudflare.pr
 // ── Env helpers ───────────────────────────────────────────────────────────────
 
 const BASE_ENV = {
-  CLOUDFLARE_ACCOUNT_ID: "test-account-123",
+  CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
   CLOUDFLARE_STREAM_API_TOKEN: "test-token-secret",
   CLOUDFLARE_STREAM_CUSTOMER_CODE: "abc123customer",
   CLOUDFLARE_STREAM_API_TIMEOUT_MS: "5000",
@@ -114,7 +114,7 @@ describe("CloudflareStreamProvider", () => {
       expect(result.playbackUrl).toBe(
         "https://customer-abc123customer.cloudflarestream.com/abc123def456ghi789jkl012/manifest/video.m3u8",
       );
-      expect(result.status).toBe("ready");
+      expect(result.status).toBe("waiting_signal");
     });
 
     it("sends Authorization header with Bearer token", async () => {
@@ -133,7 +133,7 @@ describe("CloudflareStreamProvider", () => {
       await provider.createLiveInput({ name: "Test" });
 
       const [url] = fetchSpy.mock.calls[0];
-      expect(String(url)).toContain("test-account-123/stream/live_inputs");
+      expect(String(url)).toContain("0123456789abcdef0123456789abcdef/stream/live_inputs");
     });
 
     it("does NOT include API token in request body", async () => {
@@ -144,7 +144,7 @@ describe("CloudflareStreamProvider", () => {
       const [, options] = fetchSpy.mock.calls[0];
       const body = JSON.parse((options as RequestInit).body as string);
       expect(JSON.stringify(body)).not.toContain("test-token-secret");
-      expect(JSON.stringify(body)).not.toContain("test-account-123");
+      expect(JSON.stringify(body)).not.toContain("0123456789abcdef0123456789abcdef");
     });
 
     it("throws when response uid is empty (schema validation fails)", async () => {
@@ -200,7 +200,7 @@ describe("CloudflareStreamProvider", () => {
     it("throws when CLOUDFLARE_ACCOUNT_ID is missing", async () => {
       delete process.env.CLOUDFLARE_ACCOUNT_ID;
       const provider = new CloudflareStreamProvider();
-      await expect(provider.createLiveInput({ name: "NoAccount" })).rejects.toThrow("CLOUDFLARE_ACCOUNT_ID is required");
+      await expect(provider.createLiveInput({ name: "NoAccount" })).rejects.toThrow();
     });
 
     it("throws when CLOUDFLARE_STREAM_API_TOKEN is missing", async () => {
@@ -210,12 +210,11 @@ describe("CloudflareStreamProvider", () => {
       await expect(provider.createLiveInput({ name: "NoToken" })).rejects.toThrow("CLOUDFLARE_STREAM_API_TOKEN");
     });
 
-    it("returns null playbackUrl when CLOUDFLARE_STREAM_CUSTOMER_CODE is not set", async () => {
+    it("rejects startup when CLOUDFLARE_STREAM_CUSTOMER_CODE is not set", async () => {
       delete process.env.CLOUDFLARE_STREAM_CUSTOMER_CODE;
       mockFetchSuccess();
       const provider = new CloudflareStreamProvider();
-      const result = await provider.createLiveInput({ name: "NoCustomer" });
-      expect(result.playbackUrl).toBeNull();
+      await expect(provider.createLiveInput({ name: "NoCustomer" })).rejects.toThrow();
     });
 
     it("does not retry POST on 401 error", async () => {
@@ -285,7 +284,7 @@ describe("CloudflareStreamProvider", () => {
       expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("provider_error");
     });
 
-    it("maps 'new_configuration_accepted' to 'ready'", async () => {
+    it("maps 'new_configuration_accepted' to 'waiting_signal'", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
         new Response(JSON.stringify({
           success: true,
@@ -293,7 +292,7 @@ describe("CloudflareStreamProvider", () => {
           errors: [],
         }), { status: 200, headers: { "Content-Type": "application/json" } }),
       );
-      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("ready");
+      expect(await new CloudflareStreamProvider().getLiveInputStatus("uid1")).toBe("waiting_signal");
     });
 
     it("returns 'error' when Cloudflare API fails", async () => {

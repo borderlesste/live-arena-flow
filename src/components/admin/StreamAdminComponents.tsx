@@ -306,7 +306,7 @@ export function ObsPublishingOptions({
             {/* Protocolo */}
             <div className="space-y-1.5">
               <Label htmlFor="obs-protocol">Protocolo de ingestión</Label>
-              <Select value={obsProtocol} onValueChange={onObsProtocolChange as (v: string) => void}>
+              <Select value="rtmps" onValueChange={onObsProtocolChange as (v: string) => void} disabled>
                 <SelectTrigger id="obs-protocol" className="bg-surface-2 border-border/60">
                   <SelectValue />
                 </SelectTrigger>
@@ -332,7 +332,7 @@ export function ObsPublishingOptions({
                   </Label>
                   <p className="text-[10px] text-muted-foreground">Guarda la emisión al finalizar (si el servidor lo soporta).</p>
                 </div>
-                <Switch id="obs-recording" checked={recordingEnabled} onCheckedChange={onRecordingEnabledChange} />
+                <Switch id="obs-recording" checked={recordingEnabled} onCheckedChange={onRecordingEnabledChange} disabled />
               </div>
               <div className="flex items-center justify-between gap-3 rounded-md border border-border/40 bg-surface-2/40 p-2.5">
                 <div>

@@ -1,15 +1,40 @@
-const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+function decodeJwtPayload(token) {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
 
 function isUsablePublicKey(key) {
   const value = key?.trim();
-  return Boolean(value?.startsWith("sb_publishable_"));
+  if (!value) return false;
+  if (value.startsWith("sb_publishable_")) return true;
+  const payload = decodeJwtPayload(value);
+  return payload?.role === "anon" && typeof payload?.exp === "number" && payload.exp > Date.now() / 1000;
 }
 
-const publicSupabasePublishableKey = [
-  process.env.SUPABASE_PUBLISHABLE_KEY,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-].map((key) => key?.trim()).find(isUsablePublicKey);
+const publicSupabaseExplicitlyDisabled =
+  process.env.NEXT_PUBLIC_SUPABASE_URL === "" &&
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY === "";
+
+const publicSupabaseUrl = publicSupabaseExplicitlyDisabled
+  ? undefined
+  : [
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_URL,
+      process.env.VITE_SUPABASE_URL,
+    ].map((value) => value?.trim()).find(Boolean);
+
+const publicSupabasePublishableKey = publicSupabaseExplicitlyDisabled
+  ? undefined
+  : [
+      process.env.SUPABASE_PUBLISHABLE_KEY,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    ].map((key) => key?.trim()).find(isUsablePublicKey);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

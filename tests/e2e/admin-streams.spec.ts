@@ -237,7 +237,7 @@ test.describe("Admin streams — manual source creation", () => {
 
   test("creates a manual HLS source successfully", async ({ page }) => {
     await setupAdminPage(page);
-    await page.waitForSelector('[id="source-title"]', { timeout: 8_000 });
+    await expect(page.locator('[id="source-title"]')).toBeVisible({ timeout: 20_000 });
 
     // Fill form
     await page.getByLabel(/nombre de la señal/i).fill("Señal Manual E2E");

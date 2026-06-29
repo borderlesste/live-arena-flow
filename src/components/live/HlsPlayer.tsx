@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface HlsPlayerProps {
   src: string;
@@ -16,7 +16,6 @@ interface HlsPlayerProps {
  */
 export function HlsPlayer({ src, poster, muted = true, autoPlay = true, onStatusChange, className }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [, force] = useState(0);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -50,7 +49,8 @@ export function HlsPlayer({ src, poster, muted = true, autoPlay = true, onStatus
       if (disposed) return;
       const Hls = mod.default;
       if (!Hls.isSupported()) { onStatusChange?.("error"); return; }
-      hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      const lowLatencyMode = new URL(src).searchParams.get("protocol") === "llhls";
+      hls = new Hls({ enableWorker: true, lowLatencyMode });
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -59,11 +59,18 @@ export function HlsPlayer({ src, poster, muted = true, autoPlay = true, onStatus
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
-          onStatusChange?.("error");
-          try { hls?.destroy(); } catch { /* noop */ }
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            onStatusChange?.("buffering");
+            hls?.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            onStatusChange?.("buffering");
+            hls?.recoverMediaError();
+          } else {
+            onStatusChange?.("error");
+            try { hls?.destroy(); } catch { /* noop */ }
+          }
         }
       });
-      force((x) => x + 1);
     })();
 
     return () => {

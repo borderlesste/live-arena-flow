@@ -12,9 +12,14 @@ describe("Supabase public key selection", () => {
     expect(isUsableSupabasePublicKey(jwt(100), 200)).toBe(false);
   });
 
-  it("rejects legacy JWTs and accepts modern publishable keys", () => {
-    expect(isUsableSupabasePublicKey(jwt(300), 200)).toBe(false);
+  it("accepts valid legacy anon JWTs and modern publishable keys", () => {
+    expect(isUsableSupabasePublicKey(jwt(300), 200)).toBe(true);
     expect(isUsableSupabasePublicKey("sb_publishable_valid-test-key", 200)).toBe(true);
+  });
+
+  it("rejects non-anon JWTs", () => {
+    const serviceRoleJwt = `${Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify({ role: "service_role", exp: 300 })).toString("base64url")}.signature`;
+    expect(isUsableSupabasePublicKey(serviceRoleJwt, 200)).toBe(false);
   });
 
   it("prefers the server publishable key over the browser alias", () => {
