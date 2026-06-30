@@ -14,6 +14,15 @@ import type { Match } from "@/types";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+HTMLElement.prototype.scrollIntoView = vi.fn();
+
 const noop = () => {};
 const asyncNoop = async () => {};
 
@@ -29,6 +38,13 @@ const testMatch: Match = {
   startsAt: "2026-06-25T20:00:00Z",
   venue: "Estadio Test",
   streams: [],
+};
+
+const secondTestMatch: Match = {
+  ...testMatch,
+  id: "m2",
+  homeTeamId: "h2",
+  awayTeamId: "a2",
 };
 
 const defaultFormProps = {
@@ -99,6 +115,40 @@ describe("SourceGeneralForm", () => {
   it("shows the URL field when OBS is disabled", () => {
     render(<SourceGeneralForm {...defaultFormProps} isObsEnabled={false} />);
     expect(screen.getByLabelText(/url de reproducción/i)).toBeInTheDocument();
+  });
+
+  it("searches and selects a match without changing the save flow", async () => {
+    const onMatchChange = vi.fn();
+    render(
+      <SourceGeneralForm
+        {...defaultFormProps}
+        matches={[testMatch, secondTestMatch]}
+        selectedMatchId="m1"
+        onMatchChange={onMatchChange}
+        eventLabel={(id) => id === "m1" ? "Deportes Puerto Montt vs Rangers" : "Colo-Colo vs Universidad de Chile"}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: /partido/i }));
+    fireEvent.change(screen.getByRole("combobox", { name: /buscar partido/i }), {
+      target: { value: "Colo-Colo" },
+    });
+    fireEvent.click(await screen.findByText("Colo-Colo vs Universidad de Chile"));
+
+    expect(onMatchChange).toHaveBeenCalledWith("m2");
+  });
+
+  it("keeps long selected match names inside the form column", () => {
+    render(
+      <SourceGeneralForm
+        {...defaultFormProps}
+        eventLabel={() => "Deportes Puerto Montt vs Deportes Recoleta con un nombre muy largo"}
+      />,
+    );
+
+    const picker = screen.getByRole("combobox", { name: /partido/i });
+    expect(picker).toHaveClass("min-w-0", "overflow-hidden");
+    expect(picker.querySelector("span")).toHaveClass("min-w-0", "truncate");
   });
 
   it("hides the URL field when OBS is enabled", () => {

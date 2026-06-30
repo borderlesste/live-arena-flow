@@ -33,6 +33,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
 
   const { status, retry } = useLiveStream(source);
   const adapter = source ? pickAdapter(source) : "unsupported";
+  const mediaControlsEnabled = status === "live" && (adapter === "hls" || adapter === "html5");
 
   function handleSelect(v: string) {
     setSelectedStreamId(v);
@@ -71,7 +72,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
               </Select>
             ) : null}
           </div>
-          <PlayerControls containerRef={containerRef} />
+          <PlayerControls containerRef={containerRef} mediaControlsEnabled={mediaControlsEnabled} />
         </div>
       </div>
     </div>

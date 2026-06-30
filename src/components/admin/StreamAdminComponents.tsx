@@ -5,13 +5,17 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { ErrorState, EmptyState } from "@/components/feedback/States";
 import { SourceStatusBadge, SourceKindBadge, PlaybackFormatBadge } from "./SourceStatusBadge";
 import { CopyCredentialButton } from "./CopyCredentialButton";
 import {
   Eye, EyeOff, RadioTower, RefreshCw, Plus, Pencil, Trash2, MoreVertical,
-  Ban, CheckCircle, Save, X, Loader2, ShieldCheck, Wifi, WifiOff,
+  Ban, Check, CheckCircle, ChevronsUpDown, Save, X, Loader2, ShieldCheck, Wifi, WifiOff,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -53,6 +57,71 @@ interface GeneralFormProps {
   createState?: CreateButtonState;
 }
 
+interface MatchComboboxProps {
+  matches: Match[];
+  selectedMatchId: string;
+  onMatchChange: (id: string) => void;
+  eventLabel: (id: string) => string;
+  matchError?: string;
+}
+
+function MatchCombobox({
+  matches, selectedMatchId, onMatchChange, eventLabel, matchError,
+}: MatchComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const selectedLabel = selectedMatchId ? eventLabel(selectedMatchId) : "";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          id="source-event"
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-invalid={Boolean(matchError)}
+          aria-describedby={matchError ? "source-event-error" : undefined}
+          className={cn(
+            "min-w-0 w-full justify-between overflow-hidden bg-surface-2 px-3 font-normal hover:bg-surface-2",
+            !selectedMatchId && "text-muted-foreground",
+            matchError && "border-destructive",
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate text-left">{selectedLabel || "Buscar partido..."}</span>
+          <ChevronsUpDown className="shrink-0 opacity-50" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command label="Buscar partido">
+          <CommandInput placeholder="Buscar por equipo o ID..." />
+          <CommandList>
+            <CommandEmpty>No se encontraron partidos.</CommandEmpty>
+            <CommandGroup heading="Partidos disponibles">
+              {matches.map((match) => {
+                const label = eventLabel(match.id);
+                return (
+                  <CommandItem
+                    key={match.id}
+                    value={`${label} ${match.id}`}
+                    onSelect={() => {
+                      onMatchChange(match.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check className={cn("mr-2", selectedMatchId === match.id ? "opacity-100" : "opacity-0")} />
+                    <span className="truncate">{label}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 
 // ─── SourceGeneralForm ────────────────────────────────────────────────────────
 
@@ -92,7 +161,7 @@ export function SourceGeneralForm({
       <CardContent className="space-y-4">
         {/* Date + Match */}
         <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="source-date">Fecha partido</Label>
             <Input
               id="source-date"
@@ -103,7 +172,7 @@ export function SourceGeneralForm({
               aria-label="Fecha del partido"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="source-event">
               Partido <span className="text-destructive" aria-hidden="true">*</span>
             </Label>
@@ -112,20 +181,13 @@ export function SourceGeneralForm({
             ) : isEventsError ? (
               <p className="text-xs text-destructive" role="alert">Error al cargar partidos.</p>
             ) : (
-              <Select value={selectedMatchId} onValueChange={onMatchChange}>
-                <SelectTrigger
-                  id="source-event"
-                  className={cn("bg-surface-2 border-border/60 focus-visible:ring-primary", matchError && "border-destructive")}
-                  aria-describedby={matchError ? "source-event-error" : undefined}
-                >
-                  <SelectValue placeholder="Selecciona un partido" />
-                </SelectTrigger>
-                <SelectContent className="bg-surface-2 border-border max-h-64">
-                  {matches.map((match) => (
-                    <SelectItem key={match.id} value={match.id}>{eventLabel(match.id)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MatchCombobox
+                matches={matches}
+                selectedMatchId={selectedMatchId}
+                onMatchChange={onMatchChange}
+                eventLabel={eventLabel}
+                matchError={matchError}
+              />
             )}
             {matchError && (
               <p id="source-event-error" className="text-xs text-destructive" role="alert">{matchError}</p>
@@ -339,7 +401,9 @@ export function ObsPublishingOptions({
                   <Label htmlFor="obs-latency" className="text-xs font-medium cursor-pointer">
                     Baja latencia
                   </Label>
-                  <p className="text-[10px] text-muted-foreground">Optimiza la señal reduciendo el buffering en el reproductor.</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Requiere OBS con fotogramas clave cada 2–4 s y B-frames en 0.
+                  </p>
                 </div>
                 <Switch id="obs-latency" checked={lowLatencyEnabled} onCheckedChange={onLowLatencyEnabledChange} />
               </div>

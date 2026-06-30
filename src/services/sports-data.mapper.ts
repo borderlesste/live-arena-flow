@@ -65,7 +65,9 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
       // Only include streams that have a playable URL — OBS sources without
       // STREAM_PLAYBACK_BASE_URL configured won't have a URL yet.
       const playableStreams = managedSources.filter(
-        (source) => source.purpose !== "highlight" && (source.url || source.embedUrl),
+        (source) => source.purpose !== "highlight" &&
+          (source.url || source.embedUrl) &&
+          (source.sourceKind !== "obs" || source.status === "live"),
       );
 
       // If any OBS source for this match is actively live (detected via MediaMTX),

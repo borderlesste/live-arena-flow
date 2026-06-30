@@ -336,7 +336,11 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
     await this.updateLiveInput(providerInputId, { enabled: true });
   }
 
-  async updateLiveInput(providerInputId: string, input: { enabled?: boolean; name?: string }): Promise<void> {
+  async updateLiveInput(providerInputId: string, input: {
+    enabled?: boolean;
+    name?: string;
+    lowLatencyEnabled?: boolean;
+  }): Promise<void> {
     const cfg = getCloudflareStreamConfig();
     await this.request<unknown>(
       "PUT",
@@ -346,6 +350,7 @@ export class CloudflareStreamProvider implements LiveStreamProvider {
       {
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
         ...(input.name ? { meta: { name: input.name } } : {}),
+        ...(input.lowLatencyEnabled !== undefined ? { preferLowLatency: input.lowLatencyEnabled } : {}),
       },
     );
   }

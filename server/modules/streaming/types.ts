@@ -39,7 +39,11 @@ export interface LiveStreamProvider {
   createLiveInput(input: CreateLiveInputInput): Promise<CreatedLiveInput>;
   getLiveInput?(providerInputId: string): Promise<ProviderLiveInput>;
   getLiveInputStatus(providerInputId: string): Promise<LiveInputStatus>;
-  updateLiveInput?(providerInputId: string, input: { enabled?: boolean; name?: string }): Promise<void>;
+  updateLiveInput?(providerInputId: string, input: {
+    enabled?: boolean;
+    name?: string;
+    lowLatencyEnabled?: boolean;
+  }): Promise<void>;
   getCredentials?(providerInputId: string): Promise<RotatedLiveInputCredentials & { ingestProtocol: "rtmps" | "rtmp" | "srt" }>;
   disableLiveInput(providerInputId: string): Promise<void>;
   enableLiveInput(providerInputId: string): Promise<void>;

@@ -1565,6 +1565,25 @@ const server = createServer(async (request, response) => {
         currentSource.playbackUrl = body.playbackUrl;
         currentSource.playbackUrlVerified = true;
       }
+
+      if (
+        body.lowLatencyEnabled !== undefined &&
+        currentSource.sourceKind === "obs" &&
+        currentSource.provider === "cloudflare_stream" &&
+        currentSource.providerInputId
+      ) {
+        const provider = providerForSource(currentSource);
+        if (!provider.updateLiveInput) {
+          return json(response, 502, { error: "El proveedor no permite actualizar la baja latencia" });
+        }
+        try {
+          await provider.updateLiveInput(currentSource.providerInputId, {
+            lowLatencyEnabled: currentSource.lowLatencyEnabled === true,
+          });
+        } catch {
+          return json(response, 502, { error: "No se pudo actualizar la baja latencia en Cloudflare" });
+        }
+      }
       currentSource.updatedAt = new Date().toISOString();
 
       if (currentSource.isPrimary) {

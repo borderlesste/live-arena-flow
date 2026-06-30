@@ -329,6 +329,18 @@ describe("CloudflareStreamProvider", () => {
       expect((options as RequestInit).method).toBe("PUT");
       expect(JSON.parse(String((options as RequestInit).body))).toEqual({ enabled });
     });
+
+    it("updates the Cloudflare low-latency preference", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+
+      await new CloudflareStreamProvider().updateLiveInput("uid-latency", { lowLatencyEnabled: false });
+
+      const [, options] = fetchSpy.mock.calls[0];
+      expect((options as RequestInit).method).toBe("PUT");
+      expect(JSON.parse(String((options as RequestInit).body))).toEqual({ preferLowLatency: false });
+    });
   });
 
   // ── getCredentials ─────────────────────────────────────────────────────────

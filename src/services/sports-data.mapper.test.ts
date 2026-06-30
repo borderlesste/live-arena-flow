@@ -22,5 +22,25 @@ describe("mapSportsEvents", () => {
     const source = { id: "source-1", matchId: "event-1", createdAt: new Date().toISOString(), type: "hls", url: "https://cdn.example.com/live.m3u8", title: "OBS principal", isExternal: false, purpose: "live" } as const;
     expect(mapSportsEvents([event], [source]).matches[0].streams[0].title).toBe("OBS principal");
   });
-});
 
+  it("does not load an OBS manifest until the provider reports a live signal", () => {
+    const source = {
+      id: "source-obs",
+      matchId: "event-1",
+      createdAt: new Date().toISOString(),
+      type: "obs_hls",
+      url: "https://customer-example.cloudflarestream.com/input/manifest/video.m3u8",
+      title: "OBS principal",
+      isExternal: false,
+      purpose: "live",
+      sourceKind: "obs",
+      status: "waiting_signal",
+    } as const;
+
+    expect(mapSportsEvents([event], [source]).matches[0].streams).toEqual([]);
+    expect(mapSportsEvents([event], [{ ...source, status: "live" }]).matches[0]).toMatchObject({
+      status: "live",
+      streams: [expect.objectContaining({ id: "source-obs" })],
+    });
+  });
+});
