@@ -1424,7 +1424,7 @@ const server = createServer(async (request, response) => {
         return json(response, 201, { source: sanitizeManagedSource(newSource), replayed: false });
       }
 
-      const provider = getLiveStreamProvider();
+      const provider = getLiveStreamProvider(body.ingestMode);
       let liveInput: Awaited<ReturnType<typeof provider.createLiveInput>>;
       try {
         liveInput = await provider.createLiveInput({

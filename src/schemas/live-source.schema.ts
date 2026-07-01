@@ -23,6 +23,10 @@ export const liveSourceStatusSchema = z.enum([
 
 export type LiveSourceStatus = z.infer<typeof liveSourceStatusSchema>;
 
+export const obsIngestModeSchema = z.enum(["configured", "direct_cloudflare"]);
+
+export type ObsIngestMode = z.infer<typeof obsIngestModeSchema>;
+
 export const streamCredentialsSchema = z.object({
   ingestUrl: z.string().min(1),
   ingestProtocol: z.enum(["rtmp", "rtmps", "srt"]),
@@ -39,6 +43,7 @@ export const createLiveSourceSchema = z.object({
   playbackFormat: z.string().trim().min(1).max(32).optional(),
   playbackUrl: publicPlaybackUrlSchema.optional(),
   ingestProtocol: z.enum(["rtmp", "rtmps", "srt"]).optional(),
+  ingestMode: obsIngestModeSchema.optional(),
   recordingEnabled: z.boolean().optional(),
   lowLatencyEnabled: z.boolean().optional(),
   isEnabled: z.boolean().optional(),
@@ -46,6 +51,9 @@ export const createLiveSourceSchema = z.object({
 }).superRefine((value, ctx) => {
   if (value.sourceKind === "manual" && !value.playbackUrl) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["playbackUrl"], message: "URL de reproducción requerida" });
+  }
+  if (value.sourceKind === "manual" && value.ingestMode) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ingestMode"], message: "La ruta de ingesta solo aplica a fuentes OBS" });
   }
 });
 

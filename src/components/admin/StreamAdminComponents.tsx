@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import type { ManagedVideoSource } from "@/services/video-sources.service";
 import type { Match } from "@/types";
-import type { StreamCredentials } from "@/schemas/live-source.schema";
+import type { ObsIngestMode, StreamCredentials } from "@/schemas/live-source.schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -321,15 +321,20 @@ interface ObsOptionsProps {
   onObsEnabledChange: (val: boolean) => void;
   obsProtocol: "rtmp" | "rtmps" | "srt";
   onObsProtocolChange: (val: "rtmp" | "rtmps" | "srt") => void;
+  ingestMode: ObsIngestMode;
+  onIngestModeChange: (val: ObsIngestMode) => void;
   recordingEnabled: boolean;
   onRecordingEnabledChange: (val: boolean) => void;
   lowLatencyEnabled: boolean;
   onLowLatencyEnabledChange: (val: boolean) => void;
+  isEditing?: boolean;
 }
 
 export function ObsPublishingOptions({
   obsEnabled, onObsEnabledChange, obsProtocol, onObsProtocolChange,
+  ingestMode, onIngestModeChange,
   recordingEnabled, onRecordingEnabledChange, lowLatencyEnabled, onLowLatencyEnabledChange,
+  isEditing = false,
 }: ObsOptionsProps) {
   return (
     <Card className="border border-border/40 bg-surface-1 shadow-xl">
@@ -366,6 +371,28 @@ export function ObsPublishingOptions({
 
         {obsEnabled ? (
           <div className="space-y-4 animate-slideDown">
+            <div className="space-y-1.5">
+              <Label htmlFor="obs-ingest-mode">Ruta de la señal OBS</Label>
+              <Select
+                value={ingestMode}
+                onValueChange={(value) => onIngestModeChange(value as ObsIngestMode)}
+                disabled={isEditing}
+              >
+                <SelectTrigger id="obs-ingest-mode" className="bg-surface-2 border-border/60">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-surface-2 border-border">
+                  <SelectItem value="configured">Ruta predeterminada del servidor</SelectItem>
+                  <SelectItem value="direct_cloudflare">Directo a Cloudflare (sin Restream)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                {ingestMode === "direct_cloudflare"
+                  ? "OBS publicará directamente en Cloudflare Stream; Restream no interviene."
+                  : "Usa STREAM_PROVIDER; puede incluir el puente Restream → Cloudflare."}
+              </p>
+            </div>
+
             {/* Protocolo */}
             <div className="space-y-1.5">
               <Label htmlFor="obs-protocol">Protocolo de ingestión</Label>

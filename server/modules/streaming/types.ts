@@ -2,6 +2,8 @@ import type { LiveSourceStatus } from "../../../src/schemas/live-source.schema.j
 
 export type LiveInputStatus = LiveSourceStatus;
 
+export type LiveStreamProviderSelection = "configured" | "direct_cloudflare";
+
 export interface CreatedLiveInput {
   provider: string;
   providerInputId: string;

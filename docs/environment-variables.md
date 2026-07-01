@@ -27,7 +27,7 @@ This document lists names and responsibilities only. Do not commit real values.
 | `SUPABASE_PUBLISHABLE_KEY` | Production | Public Supabase key used for token verification, profile repair and as build-time fallback for the browser when `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is omitted. Accepts modern `sb_publishable_…` and legacy public `anon` JWTs that are still valid. |
 | `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` | Admin metrics/features | Server only. |
 | `STREAM_SECRET_KEY` | Production | At least 32 characters; encrypts OBS stream keys. |
-| `STREAM_PROVIDER` | Streaming | `custom`, `cloudflare`, `restream`, or `restream_cloudflare`. |
+| `STREAM_PROVIDER` | Streaming | `custom`, `cloudflare`, `restream`, or `restream_cloudflare`. The admin can bypass Restream per new source; use `cloudflare` to make direct OBS ingest the global default. |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Server only. |
 | `CLOUDFLARE_STREAM_API_TOKEN` | Cloudflare | Server-only token with Stream Write. |
 | `CLOUDFLARE_STREAM_CUSTOMER_CODE` | Cloudflare playback | Builds the public HLS hostname. |

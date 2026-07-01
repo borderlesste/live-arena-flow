@@ -33,7 +33,7 @@ import {
   type CreateButtonState,
 } from "@/components/admin/StreamAdminComponents";
 import { DeleteSourceDialog, RotateStreamKeyDialog } from "@/components/admin/StreamDialogs";
-import type { StreamCredentials } from "@/schemas/live-source.schema";
+import type { ObsIngestMode, StreamCredentials } from "@/schemas/live-source.schema";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -95,6 +95,7 @@ const AdminPage = () => {
   // ── OBS form state ────────────────────────────────────────────────────────
   const [obsEnabled, setObsEnabled] = useState(false);
   const [obsProtocol, setObsProtocol] = useState<"rtmp" | "rtmps" | "srt">("rtmps");
+  const [obsIngestMode, setObsIngestMode] = useState<ObsIngestMode>("configured");
   const [recordingEnabled, setRecordingEnabled] = useState(true);
   const [lowLatencyEnabled, setLowLatencyEnabled] = useState(false);
 
@@ -206,6 +207,7 @@ const AdminPage = () => {
     setPlaybackUrl("");
     setObsEnabled(false);
     setObsProtocol("rtmps");
+    setObsIngestMode("configured");
     setRecordingEnabled(true);
     setLowLatencyEnabled(false);
     setRevealedKey(null);
@@ -227,6 +229,7 @@ const AdminPage = () => {
     setPlaybackUrl(source.playbackUrl || source.url || source.embedUrl || "");
     setObsEnabled(source.sourceKind === "obs");
     setObsProtocol(source.ingestProtocol || "rtmps");
+    setObsIngestMode(source.provider === "cloudflare_stream" ? "direct_cloudflare" : "configured");
     setRecordingEnabled(source.recordingEnabled === true);
     setLowLatencyEnabled(source.lowLatencyEnabled === true);
     setRevealedKey(null);
@@ -298,6 +301,7 @@ const AdminPage = () => {
           playbackFormat: obsEnabled ? "hls" : format,
           playbackUrl: obsEnabled ? undefined : playbackUrl.trim(),
           ingestProtocol: obsEnabled ? obsProtocol : undefined,
+          ingestMode: obsEnabled ? obsIngestMode : undefined,
           recordingEnabled: obsEnabled ? recordingEnabled : undefined,
           lowLatencyEnabled: obsEnabled ? lowLatencyEnabled : undefined,
           idempotencyKey: currentIdempotencyKey,
@@ -563,10 +567,13 @@ const AdminPage = () => {
           onObsEnabledChange={handleObsEnabledChange}
           obsProtocol={obsProtocol}
           onObsProtocolChange={setObsProtocol}
+          ingestMode={obsIngestMode}
+          onIngestModeChange={setObsIngestMode}
           recordingEnabled={recordingEnabled}
           onRecordingEnabledChange={setRecordingEnabled}
           lowLatencyEnabled={lowLatencyEnabled}
           onLowLatencyEnabledChange={setLowLatencyEnabled}
+          isEditing={isEditing}
         />
 
         {/* Col 3 — Credenciales */}

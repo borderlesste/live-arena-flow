@@ -231,6 +231,8 @@ describe("ObsPublishingOptions", () => {
     onObsEnabledChange: noop,
     obsProtocol: "rtmps" as const,
     onObsProtocolChange: noop,
+    ingestMode: "configured" as const,
+    onIngestModeChange: noop,
     recordingEnabled: false,
     onRecordingEnabledChange: noop,
     lowLatencyEnabled: false,
@@ -245,6 +247,12 @@ describe("ObsPublishingOptions", () => {
   it("shows protocol selector when OBS is enabled", () => {
     render(<ObsPublishingOptions {...obsProps} obsEnabled={true} />);
     expect(screen.getByLabelText(/protocolo de ingestión/i)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /ruta de la señal obs/i })).toBeInTheDocument();
+  });
+
+  it("explains when OBS bypasses Restream", () => {
+    render(<ObsPublishingOptions {...obsProps} obsEnabled={true} ingestMode="direct_cloudflare" />);
+    expect(screen.getByText(/restream no interviene/i)).toBeInTheDocument();
   });
 
   it("does not show protocol selector when OBS is disabled", () => {

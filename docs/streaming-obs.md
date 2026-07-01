@@ -29,3 +29,5 @@ Set `STREAM_PROVIDER=restream` to provision OBS with Restream ingest credentials
 Restream is an ingest and multistream destination in this integration. It does not provide the site with a public HLS playback URL, so configure a separate HTTPS playback URL if the match must be viewable on this website.
 
 For the managed bridge use `STREAM_PROVIDER=restream_cloudflare`. The admin API creates a Cloudflare Live Input per source, returns Restream credentials for OBS, and separately reveals the Cloudflare destination credentials to configure as a Custom RTMP channel in Restream. Cloudflare then provides the HLS URL used by the public player.
+
+Restream is not mandatory for OBS ingest. Select `Directo a Cloudflare (sin Restream)` while creating a source to provision Cloudflare credentials directly for OBS. To make that route the global default later, change `STREAM_PROVIDER` from `restream_cloudflare` to `cloudflare` and redeploy; no schema migration is required.

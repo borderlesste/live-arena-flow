@@ -1,6 +1,6 @@
 import type { StreamSource } from "@/types";
 import { publicEnv } from "@/config/env";
-import type { CreateLiveSourceResponse, LiveSourceStatus, StreamCredentials } from "@/schemas/live-source.schema";
+import type { CreateLiveSourceResponse, LiveSourceStatus, ObsIngestMode, StreamCredentials } from "@/schemas/live-source.schema";
 
 const API_BASE = publicEnv.NEXT_PUBLIC_API_BASE_URL;
 
@@ -40,6 +40,7 @@ export interface CreateLiveSourcePayload {
   playbackFormat?: string;
   playbackUrl?: string;
   ingestProtocol?: "rtmp" | "rtmps" | "srt";
+  ingestMode?: ObsIngestMode;
   recordingEnabled?: boolean;
   lowLatencyEnabled?: boolean;
   /** Idempotency key — prevents duplicate entries on double-click */

@@ -2,7 +2,7 @@ import { CloudflareStreamProvider } from "./cloudflare.provider.js";
 import { CustomRtmpProvider } from "./providers.js";
 import { RestreamProvider } from "./restream.provider.js";
 import { RestreamCloudflareProvider } from "./restream-cloudflare.provider.js";
-import type { LiveStreamProvider } from "./types.js";
+import type { LiveStreamProvider, LiveStreamProviderSelection } from "./types.js";
 
 /**
  * Returns the configured live stream provider.
@@ -12,10 +12,15 @@ import type { LiveStreamProvider } from "./types.js";
  *   STREAM_PROVIDER=custom      → CustomRtmpProvider (your own RTMP/RTMPS/SRT server)
  *
  * Use "restream_cloudflare" for Restream ingest with Cloudflare HLS playback.
+ * Pass "direct_cloudflare" for an allowlisted per-source bypass of Restream.
  * The default is "custom" for backward compatibility.
  * The API token (CLOUDFLARE_STREAM_API_TOKEN) is only read server-side, never exposed to the frontend.
  */
-export function getLiveStreamProvider(): LiveStreamProvider {
+export function getLiveStreamProvider(selection: LiveStreamProviderSelection = "configured"): LiveStreamProvider {
+  if (selection === "direct_cloudflare") {
+    return new CloudflareStreamProvider();
+  }
+
   const providerName = (process.env.STREAM_PROVIDER || "custom").toLowerCase().trim();
 
   switch (providerName) {

@@ -36,3 +36,9 @@ Set `STREAM_PROVIDER=restream_cloudflare` and configure both the Restream static
 4. Requires the administrator to add those Cloudflare credentials as an enabled Custom RTMP channel in Restream.
 
 The Cloudflare destination key is never included in public video-source responses. Rotating the source creates a new Cloudflare Live Input, so the Custom RTMP channel in Restream must be updated with the newly revealed destination credentials.
+
+## Direct OBS fallback
+
+Restream is optional. When the bridge is configured, a new OBS source can select **Directo a Cloudflare (sin Restream)** in the admin panel. The backend then provisions a normal Cloudflare Live Input and returns its RTMPS credentials directly to OBS; no Restream publishing key or channel is used for that source.
+
+To remove Restream for every new source, set `STREAM_PROVIDER=cloudflare` and redeploy the API. Existing sources retain their saved provider and continue using their original route until they are recreated. Keep the Cloudflare variables configured in both modes.

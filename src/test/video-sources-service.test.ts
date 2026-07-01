@@ -102,6 +102,13 @@ describe("createLiveSource", () => {
     expect(((options as RequestInit).headers as Record<string, string>)["Idempotency-Key"]).toBe(uniqueKey);
   });
 
+  it("sends the allowlisted direct Cloudflare ingest mode", async () => {
+    const fetchSpy = mockFetch({ source: { id: "new-1", ...payload, type: "obs_hls", isExternal: false, createdAt: "2026-06-25T00:00:00Z" }, replayed: false });
+    await createLiveSource({ ...payload, ingestMode: "direct_cloudflare" }, TOKEN);
+    const [, options] = fetchSpy.mock.calls[0];
+    expect(JSON.parse(String((options as RequestInit).body))).toMatchObject({ ingestMode: "direct_cloudflare" });
+  });
+
   it("returns the created source including OBS credentials on success", async () => {
     const created = {
       id: "new-1", title: "Test OBS", matchId: "m1", type: "obs_hls", isExternal: false,

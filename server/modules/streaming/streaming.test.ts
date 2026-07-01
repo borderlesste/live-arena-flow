@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CustomRtmpProvider } from "./providers.js";
+import { CloudflareStreamProvider } from "./cloudflare.provider.js";
 import { getLiveStreamProvider } from "./factory.js";
 
 describe("CustomRtmpProvider", () => {
@@ -142,5 +143,10 @@ describe("getLiveStreamProvider factory", () => {
     expect(provider).toBeInstanceOf(CustomRtmpProvider);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("unknown_provider"));
     warnSpy.mockRestore();
+  });
+
+  it("allows OBS to bypass Restream and publish directly to Cloudflare", () => {
+    process.env.STREAM_PROVIDER = "restream_cloudflare";
+    expect(getLiveStreamProvider("direct_cloudflare")).toBeInstanceOf(CloudflareStreamProvider);
   });
 });
