@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import type { ManagedVideoSource } from "@/services/video-sources.service";
 import type { Match } from "@/types";
+import type { StreamCredentials } from "@/schemas/live-source.schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -442,13 +443,14 @@ interface CredentialsPanelProps {
   onReveal: () => Promise<void>;
   onRotate: () => void;
   revealedKey: string | null;
+  relayDestination?: StreamCredentials | null;
   isRevealing: boolean;
   isRotating: boolean;
   isProvisioning: boolean;
 }
 
 export function StreamCredentialsPanel({
-  source, onReveal, onRotate, revealedKey, isRevealing, isRotating, isProvisioning,
+  source, onReveal, onRotate, revealedKey, relayDestination = null, isRevealing, isRotating, isProvisioning,
 }: CredentialsPanelProps) {
   const [showKey, setShowKey] = useState(false);
 
@@ -510,6 +512,7 @@ export function StreamCredentialsPanel({
   }
 
   const isManual = source.sourceKind !== "obs";
+  const isRestreamCloudflare = source.provider === "restream_cloudflare";
 
   return (
     <Card className="border border-border/40 bg-surface-1 shadow-xl">
@@ -628,6 +631,61 @@ export function StreamCredentialsPanel({
             </div>
 
             {/* URL HLS de reproducción */}
+            {isRestreamCloudflare ? (
+              <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Destino Cloudflare para Restream</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Registra estos datos como un canal Custom RTMP en Restream. No los pegues en OBS.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground" htmlFor="relay-ingest-url">
+                    Servidor RTMPS de Cloudflare
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="relay-ingest-url"
+                      value={relayDestination?.ingestUrl || "Revela las credenciales para cargar el destino"}
+                      readOnly
+                      className="bg-surface-2 border-border/60 font-mono text-xs truncate"
+                    />
+                    <CopyCredentialButton
+                      value={relayDestination?.ingestUrl}
+                      label="Servidor Cloudflare"
+                      size="icon"
+                      variant="secondary"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground" htmlFor="relay-stream-key">
+                    Clave del destino Cloudflare
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="relay-stream-key"
+                      type={showKey ? "text" : "password"}
+                      value={showKey ? (relayDestination?.streamKey || "") : "••••••••••••••••"}
+                      readOnly
+                      className="bg-surface-2 border-border/60 font-mono text-xs"
+                    />
+                    <CopyCredentialButton
+                      value={relayDestination?.streamKey}
+                      label="Clave Cloudflare"
+                      size="icon"
+                      variant="secondary"
+                    />
+                  </div>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-muted-foreground">
+                  <li>En Restream abre <strong>Channels → Add New → Custom RTMP</strong>.</li>
+                  <li>Copia el servidor y la clave Cloudflare mostrados arriba.</li>
+                  <li>Activa ese canal antes de iniciar OBS.</li>
+                </ol>
+              </div>
+            ) : null}
+
             {source.playbackUrl && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground" id="lbl-hls">
@@ -657,10 +715,14 @@ export function StreamCredentialsPanel({
               onClick={onRotate}
               disabled={isRotating}
               className="w-full text-xs border-warning/30 text-warning hover:bg-warning/10 hover:text-warning gap-1.5"
-              aria-label="Rotar clave de transmisión OBS"
+              aria-label={isRestreamCloudflare ? "Recrear destino Cloudflare" : "Rotar clave de transmisión OBS"}
             >
               <RefreshCw className={cn("h-3.5 w-3.5", isRotating && "animate-spin")} />
-              {isRotating ? "Rotando clave…" : "Rotar clave OBS"}
+              {isRotating
+                ? "Actualizando credenciales…"
+                : isRestreamCloudflare
+                  ? "Recrear destino Cloudflare"
+                  : "Rotar clave OBS"}
             </Button>
 
             {/* Guía OBS Studio */}

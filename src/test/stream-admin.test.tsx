@@ -300,6 +300,29 @@ describe("StreamCredentialsPanel", () => {
     expect(screen.getByLabelText(/clave de transmisión/i, { selector: "input" })).toBeInTheDocument();
   });
 
+  it("shows the Cloudflare relay destination for the composite provider", () => {
+    render(
+      <StreamCredentialsPanel
+        source={{ ...obsSource, provider: "restream_cloudflare" }}
+        onReveal={asyncNoop}
+        onRotate={noop}
+        revealedKey="restream-key"
+        relayDestination={{
+          ingestProtocol: "rtmps",
+          ingestUrl: "rtmps://live.cloudflare.com:443/live/",
+          streamKey: "cloudflare-key",
+        }}
+        isRevealing={false}
+        isRotating={false}
+        isProvisioning={false}
+      />,
+    );
+
+    expect(screen.getByText("Destino Cloudflare para Restream")).toBeInTheDocument();
+    expect(screen.getByLabelText("Servidor RTMPS de Cloudflare")).toHaveValue("rtmps://live.cloudflare.com:443/live/");
+    expect(screen.getByLabelText("Clave del destino Cloudflare")).toHaveAttribute("type", "password");
+  });
+
   it("shows masked key with last4 when key not revealed", () => {
     render(
       <StreamCredentialsPanel

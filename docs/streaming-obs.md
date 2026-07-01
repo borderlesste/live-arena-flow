@@ -21,3 +21,11 @@ The admin panel polls the grouped status endpoint while visible as a fallback. T
 For OBS Studio select `Servicio: Personalizado`, copy the RTMPS server and stream key from the credential panel, use H.264 video, AAC audio, CBR, and a fixed keyframe interval between two and eight seconds. Do not paste the HLS URL into OBS.
 
 The committed webhook secret was removed and must be treated as compromised: rotate it before enabling Cloudflare Notifications.
+
+## Restream
+
+Set `STREAM_PROVIDER=restream` to provision OBS with Restream ingest credentials. The backend supports either an OAuth access token (`RESTREAM_ACCESS_TOKEN`) or static server-side credentials (`RESTREAM_INGEST_URL` and `RESTREAM_STREAM_KEY`). Tokens and publishing keys never cross the public API.
+
+Restream is an ingest and multistream destination in this integration. It does not provide the site with a public HLS playback URL, so configure a separate HTTPS playback URL if the match must be viewable on this website.
+
+For the managed bridge use `STREAM_PROVIDER=restream_cloudflare`. The admin API creates a Cloudflare Live Input per source, returns Restream credentials for OBS, and separately reveals the Cloudflare destination credentials to configure as a Custom RTMP channel in Restream. Cloudflare then provides the HLS URL used by the public player.

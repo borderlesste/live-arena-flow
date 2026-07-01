@@ -1,6 +1,6 @@
 import type { StreamSource } from "@/types";
 import { publicEnv } from "@/config/env";
-import type { CreateLiveSourceResponse, LiveSourceStatus } from "@/schemas/live-source.schema";
+import type { CreateLiveSourceResponse, LiveSourceStatus, StreamCredentials } from "@/schemas/live-source.schema";
 
 const API_BASE = publicEnv.NEXT_PUBLIC_API_BASE_URL;
 
@@ -50,6 +50,7 @@ export interface CredentialsRevealResponse {
   ingestUrl: string;
   ingestProtocol: "rtmp" | "rtmps" | "srt";
   streamKey: string;
+  relayDestination?: StreamCredentials;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

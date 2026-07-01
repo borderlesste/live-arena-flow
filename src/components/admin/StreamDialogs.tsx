@@ -61,16 +61,19 @@ interface RotateDialogProps {
   onConfirm: () => void;
   sourceName: string;
   isLive?: boolean;
+  relayMode?: boolean;
 }
 
-export function RotateStreamKeyDialog({ isOpen, onClose, onConfirm, sourceName, isLive }: RotateDialogProps) {
+export function RotateStreamKeyDialog({ isOpen, onClose, onConfirm, sourceName, isLive, relayMode = false }: RotateDialogProps) {
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>¿Rotar clave de transmisión?</AlertDialogTitle>
+          <AlertDialogTitle>{relayMode ? "¿Recrear destino Cloudflare?" : "¿Rotar clave de transmisión?"}</AlertDialogTitle>
           <AlertDialogDescription>
-            Se generará una nueva clave para <strong>{sourceName}</strong>. La clave anterior quedará invalidada inmediatamente.
+            {relayMode
+              ? <>Se creará un nuevo Live Input para <strong>{sourceName}</strong> y se retirará el anterior.</>
+              : <>Se generará una nueva clave para <strong>{sourceName}</strong>. La clave anterior quedará invalidada inmediatamente.</>}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -78,7 +81,9 @@ export function RotateStreamKeyDialog({ isOpen, onClose, onConfirm, sourceName, 
           <AlertTriangle className="h-4 w-4 text-warning" />
           <AlertTitle className="text-warning font-semibold">Reconfiguración requerida</AlertTitle>
           <AlertDescription className="text-muted-foreground text-xs">
-            Deberás copiar la nueva clave y configurarla en OBS. La emisión actual se detendrá hasta que actualices las credenciales.
+            {relayMode
+              ? "Deberás actualizar el canal Custom RTMP en Restream con el nuevo servidor y clave Cloudflare. OBS conserva sus credenciales Restream."
+              : "Deberás copiar la nueva clave y configurarla en OBS. La emisión actual se detendrá hasta que actualices las credenciales."}
           </AlertDescription>
         </Alert>
 
@@ -88,7 +93,7 @@ export function RotateStreamKeyDialog({ isOpen, onClose, onConfirm, sourceName, 
             className="bg-warning text-warning-foreground hover:bg-warning/90"
             onClick={onConfirm}
           >
-            Rotar credenciales
+            {relayMode ? "Recrear destino" : "Rotar credenciales"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

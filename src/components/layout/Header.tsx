@@ -1,13 +1,13 @@
-import { useState, type FormEvent } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Menu, Search, Globe, LogIn, Play } from "lucide-react";
+import { useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { Menu, Globe, LogIn, Play } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { SPORT_OPTIONS } from "@/lib/sports";
+import { HeaderSearch } from "@/components/layout/HeaderSearch";
 
 const NAV = [
   { to: "/", label: "Inicio", end: true },
@@ -22,18 +22,7 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const [lang, setLang] = useState("es");
   const [sport, setSport] = useState("all");
-  const [search, setSearch] = useState("");
   const loc = useLocation();
-  const navigate = useNavigate();
-
-  function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const params = new URLSearchParams();
-    if (search.trim()) params.set("q", search.trim());
-    if (sport !== "all") params.set("sport", sport);
-    navigate(`/matches${params.size ? `?${params.toString()}` : ""}`);
-    setOpen(false);
-  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 glass-strong">
@@ -75,17 +64,7 @@ export function Header() {
             </Select>
           </div>
 
-          <form className="relative hidden md:block" role="search" onSubmit={submitSearch}>
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
-              type="search"
-              placeholder="Buscar equipo, competición…"
-              className="h-9 w-[200px] bg-surface/60 pl-8"
-              aria-label="Buscar"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </form>
+          <HeaderSearch sport={sport} className="hidden md:block" inputClassName="w-[240px]" />
 
           <Select value={lang} onValueChange={setLang}>
             <SelectTrigger className="hidden h-9 w-[78px] bg-surface/60 md:flex" aria-label="Idioma">
@@ -118,10 +97,7 @@ export function Header() {
                 <SheetTitle><BrandLogo variant="white" size="md" decorative /></SheetTitle>
               </SheetHeader>
               <nav aria-label="Menú móvil" className="flex flex-col p-2">
-                <form role="search" onSubmit={submitSearch} className="relative mb-2">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar equipo o competición" className="pl-9" aria-label="Buscar partidos" />
-                </form>
+                <HeaderSearch sport={sport} className="mb-2" inputClassName="w-full" onNavigate={() => setOpen(false)} />
                 {NAV.map((item) => (
                   <NavLink
                     key={item.to}

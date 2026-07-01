@@ -27,7 +27,7 @@ This document lists names and responsibilities only. Do not commit real values.
 | `SUPABASE_PUBLISHABLE_KEY` | Production | Public Supabase key used for token verification, profile repair and as build-time fallback for the browser when `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is omitted. Accepts modern `sb_publishable_…` and legacy public `anon` JWTs that are still valid. |
 | `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` | Admin metrics/features | Server only. |
 | `STREAM_SECRET_KEY` | Production | At least 32 characters; encrypts OBS stream keys. |
-| `STREAM_PROVIDER` | Streaming | `custom` or `cloudflare`. |
+| `STREAM_PROVIDER` | Streaming | `custom`, `cloudflare`, `restream`, or `restream_cloudflare`. |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Server only. |
 | `CLOUDFLARE_STREAM_API_TOKEN` | Cloudflare | Server-only token with Stream Write. |
 | `CLOUDFLARE_STREAM_CUSTOMER_CODE` | Cloudflare playback | Builds the public HLS hostname. |
@@ -35,6 +35,10 @@ This document lists names and responsibilities only. Do not commit real values.
 | `CLOUDFLARE_STREAM_ALLOWED_ORIGINS` | Cloudflare playback | Comma-separated hostnames allowed to load the stream; do not include schemes or paths. |
 | `CLOUDFLARE_STREAM_API_TIMEOUT_MS` | Cloudflare | Backend request timeout, from 1000 to 60000 ms. |
 | `CLOUDFLARE_STREAM_WEBHOOK_SECRET` | Cloudflare production | At least 32 characters; rotate the previously exposed value. |
+| `RESTREAM_ACCESS_TOKEN` | Restream API mode | Server-only OAuth access token with `channels.read` and `stream.read`. |
+| `RESTREAM_INGEST_URL` | Restream static mode | RTMP/RTMPS/SRT ingest URL; requires `RESTREAM_STREAM_KEY`. |
+| `RESTREAM_STREAM_KEY` | Restream static mode | Server-only publishing key; never expose through `NEXT_PUBLIC_*`. |
+| `RESTREAM_API_TIMEOUT_MS` | Restream | Backend timeout from 1000 to 60000 ms. |
 | `ADMIN_API_TOKEN` | Dev/test only | Disabled as a production admin shortcut. |
 | `LEGACY_AUTH_ENABLED` | Dev only | Must stay false in production. |
 

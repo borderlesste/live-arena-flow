@@ -33,6 +33,7 @@ import {
   type CreateButtonState,
 } from "@/components/admin/StreamAdminComponents";
 import { DeleteSourceDialog, RotateStreamKeyDialog } from "@/components/admin/StreamDialogs";
+import type { StreamCredentials } from "@/schemas/live-source.schema";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -104,6 +105,7 @@ const AdminPage = () => {
   const [isRevealing, setIsRevealing] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [relayDestination, setRelayDestination] = useState<StreamCredentials | null>(null);
 
   // ── Dialog state ──────────────────────────────────────────────────────────
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -207,6 +209,7 @@ const AdminPage = () => {
     setRecordingEnabled(true);
     setLowLatencyEnabled(false);
     setRevealedKey(null);
+    setRelayDestination(null);
     setIsEditing(false);
     setFormErrors({});
     setCreateState("idle");
@@ -227,6 +230,7 @@ const AdminPage = () => {
     setRecordingEnabled(source.recordingEnabled === true);
     setLowLatencyEnabled(source.lowLatencyEnabled === true);
     setRevealedKey(null);
+    setRelayDestination(null);
     setFormErrors({});
     setCreateState("idle");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -319,6 +323,7 @@ const AdminPage = () => {
 
       // Credentials are returned once for a new provisioning response only.
       setRevealedKey(created.credentials?.streamKey ?? null);
+      setRelayDestination(created.relayDestination ?? null);
 
       await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
       toast.success(
@@ -373,7 +378,12 @@ const AdminPage = () => {
     try {
       const result = await rotateCredentials(dialogSource.id, token);
       setRevealedKey(result.streamKey);
-      toast.success("Clave de transmisión rotada. Configura la nueva clave en OBS.");
+      setRelayDestination(result.relayDestination ?? null);
+      toast.success(
+        dialogSource.provider === "restream_cloudflare"
+          ? "Destino Cloudflare recreado. Actualiza el canal Custom RTMP en Restream."
+          : "Clave de transmisión rotada. Configura la nueva clave en OBS.",
+      );
       await loadSources();
       setSelectedSource((curr) =>
         curr
@@ -396,6 +406,7 @@ const AdminPage = () => {
     try {
       const result = await revealCredentials(selectedSource.id, token);
       setRevealedKey(result.streamKey);
+      setRelayDestination(result.relayDestination ?? null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al revelar la clave");
     } finally {
@@ -564,6 +575,7 @@ const AdminPage = () => {
           onReveal={handleReveal}
           onRotate={() => selectedSource && handleRotateTrigger(selectedSource)}
           revealedKey={revealedKey}
+          relayDestination={relayDestination}
           isRevealing={isRevealing}
           isRotating={isRotating}
           isProvisioning={
@@ -595,6 +607,7 @@ const AdminPage = () => {
           onSelect={(src) => {
             setSelectedSource(src);
             setRevealedKey(null);
+            setRelayDestination(null);
           }}
         />
       </div>
@@ -613,6 +626,7 @@ const AdminPage = () => {
         onConfirm={handleRotateConfirm}
         sourceName={dialogSource?.title || ""}
         isLive={dialogSource?.status === "live"}
+        relayMode={dialogSource?.provider === "restream_cloudflare"}
       />
     </section>
   );

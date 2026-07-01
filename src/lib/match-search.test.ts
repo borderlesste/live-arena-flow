@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesSearch } from "@/lib/match-search";
+import { findMatchSearchResults, matchesSearch } from "@/lib/match-search";
 import type { Competition, Match, Team } from "@/types";
 
 const teams: Team[] = [
@@ -17,4 +17,15 @@ describe("matchesSearch", () => {
     expect(matchesSearch(match, teams, competitions, "central")).toBe(true);
   });
   it("rechaza términos ausentes", () => expect(matchesSearch(match, teams, competitions, "Barcelona")).toBe(false));
+
+  it("devuelve sugerencias completas y limita resultados", () => {
+    const results = findMatchSearchResults([match, { ...match, id: "match-2" }], teams, competitions, "capital", 1);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      match: { id: "match" },
+      homeTeam: { id: "home" },
+      awayTeam: { id: "away" },
+      competition: { id: "league" },
+    });
+  });
 });

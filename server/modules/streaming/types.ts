@@ -11,6 +11,13 @@ export interface CreatedLiveInput {
   playbackFormat: "hls" | "dash";
   playbackUrl: string | null;
   status: LiveInputStatus;
+  relayDestination?: StreamCredentials;
+}
+
+export interface StreamCredentials {
+  ingestProtocol: "rtmps" | "rtmp" | "srt";
+  ingestUrl: string;
+  streamKey: string;
 }
 
 export interface CreateLiveInputInput {
@@ -34,6 +41,11 @@ export interface RotatedLiveInputCredentials {
   ingestUrl: string;
 }
 
+export interface ProviderCredentials extends RotatedLiveInputCredentials {
+  ingestProtocol: "rtmps" | "rtmp" | "srt";
+  relayDestination?: StreamCredentials;
+}
+
 export interface LiveStreamProvider {
   readonly name: string;
   createLiveInput(input: CreateLiveInputInput): Promise<CreatedLiveInput>;
@@ -44,7 +56,7 @@ export interface LiveStreamProvider {
     name?: string;
     lowLatencyEnabled?: boolean;
   }): Promise<void>;
-  getCredentials?(providerInputId: string): Promise<RotatedLiveInputCredentials & { ingestProtocol: "rtmps" | "rtmp" | "srt" }>;
+  getCredentials?(providerInputId: string): Promise<ProviderCredentials>;
   disableLiveInput(providerInputId: string): Promise<void>;
   enableLiveInput(providerInputId: string): Promise<void>;
   deleteLiveInput(providerInputId: string): Promise<void>;

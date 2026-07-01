@@ -73,11 +73,13 @@ export const cloudflareLiveWebhookSchema = z.object({
 export const createLiveSourceResponseSchema = z.object({
   source: z.record(z.unknown()),
   credentials: streamCredentialsSchema.optional(),
+  relayDestination: streamCredentialsSchema.optional(),
   replayed: z.boolean(),
 });
 
 export type CreateLiveSourceResponse<TSource = Record<string, unknown>> = {
   source: TSource;
   credentials?: StreamCredentials;
+  relayDestination?: StreamCredentials;
   replayed: boolean;
 };

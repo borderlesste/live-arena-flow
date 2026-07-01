@@ -14,6 +14,9 @@ import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.
 import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorLegacyColumns, sponsorToLegacyRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
 import { getLiveStreamProvider } from "./modules/streaming/index.js";
 import { CloudflareStreamProvider, getCloudflareStreamConfig } from "./modules/streaming/cloudflare.provider.js";
+import { RestreamProvider, getRestreamConfig } from "./modules/streaming/restream.provider.js";
+import { RestreamCloudflareProvider } from "./modules/streaming/restream-cloudflare.provider.js";
+import type { LiveStreamProvider } from "./modules/streaming/types.js";
 import { buildWebhookEventKey, mapCloudflareEventToStatus, validateWebhookSecret } from "./modules/streaming/webhook.js";
 import {
   cloudflareLiveWebhookSchema,
@@ -53,8 +56,12 @@ if (process.env.NODE_ENV === "production" && !process.env.SUPABASE_SERVICE_ROLE_
   throw new Error("SUPABASE_SERVICE_ROLE_KEY is required in production");
 }
 
-// Validate Cloudflare Stream config when that provider is selected
-if ((process.env.STREAM_PROVIDER || "custom").toLowerCase() === "cloudflare") {
+const configuredStreamProvider = (process.env.STREAM_PROVIDER || "custom").toLowerCase();
+const usesCloudflareStream = ["cloudflare", "cloudflare_stream", "restream_cloudflare", "restream+cloudflare"].includes(configuredStreamProvider);
+const usesRestream = ["restream", "restream_io", "restream_cloudflare", "restream+cloudflare"].includes(configuredStreamProvider);
+
+// Validate every upstream used by the selected provider before accepting traffic.
+if (usesCloudflareStream) {
   getCloudflareStreamConfig();
   if (!process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) {
     throw new Error("[startup] CLOUDFLARE_ACCOUNT_ID is required when STREAM_PROVIDER=cloudflare");
@@ -69,6 +76,10 @@ if ((process.env.STREAM_PROVIDER || "custom").toLowerCase() === "cloudflare") {
   if (process.env.NODE_ENV === "production" && (process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET?.trim().length ?? 0) < 32) {
     throw new Error("[startup] CLOUDFLARE_STREAM_WEBHOOK_SECRET must contain at least 32 characters in production");
   }
+}
+
+if (usesRestream) {
+  getRestreamConfig();
 }
 
 function protectSecret(value: string): string {
@@ -542,10 +553,11 @@ function sanitizeManagedSource(source: StoredVideoSource) {
   };
 }
 
-function providerForSource(source: StoredVideoSource) {
-  return source.provider === "cloudflare_stream"
-    ? new CloudflareStreamProvider()
-    : getLiveStreamProvider();
+function providerForSource(source: StoredVideoSource): LiveStreamProvider {
+  if (source.provider === "cloudflare_stream") return new CloudflareStreamProvider();
+  if (source.provider === "restream") return new RestreamProvider();
+  if (source.provider === "restream_cloudflare") return new RestreamCloudflareProvider();
+  return getLiveStreamProvider();
 }
 
 function publicStreams(sources: StreamSource[]) {
@@ -1120,17 +1132,19 @@ const server = createServer(async (request, response) => {
       let streamKey: string;
       let ingestUrl: string = currentSource.ingestUrl || "";
       let ingestProtocol: "rtmp" | "rtmps" | "srt" = (currentSource.ingestProtocol as "rtmps") || "rtmps";
+      let relayDestination;
 
       // For Cloudflare provider: fetch credentials from Cloudflare API (preferred — no local plaintext storage)
       const provider = providerForSource(currentSource);
-      if (currentSource.provider === "cloudflare_stream" && currentSource.providerInputId && "getCredentials" in provider) {
+      if (["cloudflare_stream", "restream", "restream_cloudflare"].includes(currentSource.provider || "") && currentSource.providerInputId && provider.getCredentials) {
         try {
-          const creds = await (provider as CloudflareStreamProvider).getCredentials(currentSource.providerInputId);
+          const creds = await provider.getCredentials(currentSource.providerInputId);
           streamKey = creds.streamKey;
           ingestUrl = creds.ingestUrl;
           ingestProtocol = creds.ingestProtocol;
+          relayDestination = creds.relayDestination;
         } catch {
-          return json(response, 502, { error: { code: "CLOUDFLARE_CREDENTIALS_FETCH_FAILED", message: "No se pudieron obtener las credenciales del proveedor." } });
+          return json(response, 502, { error: { code: "STREAM_CREDENTIALS_FETCH_FAILED", message: "No se pudieron obtener las credenciales del proveedor." } });
         }
       } else {
         // Custom RTMP / legacy: decrypt from local storage
@@ -1145,6 +1159,7 @@ const server = createServer(async (request, response) => {
         ingestUrl,
         ingestProtocol,
         streamKey,
+        ...(relayDestination ? { relayDestination } : {}),
       });
     }
 
@@ -1178,7 +1193,8 @@ const server = createServer(async (request, response) => {
       try {
         const provider = providerForSource(currentSource);
         const previousProviderInputId = currentSource.providerInputId;
-        const replacement = currentSource.provider === "cloudflare_stream"
+        const isCloudflareBacked = ["cloudflare_stream", "restream_cloudflare"].includes(currentSource.provider || "");
+        const replacement = isCloudflareBacked
           ? await provider.createLiveInput({
               name: currentSource.title,
               eventId: currentSource.matchId,
@@ -1191,7 +1207,7 @@ const server = createServer(async (request, response) => {
             : null;
         if (!replacement) return json(response, 501, { error: "No soportado por el proveedor" });
 
-        const isReplacement = currentSource.provider === "cloudflare_stream";
+        const isReplacement = isCloudflareBacked;
         const nextVersion = (currentSource.credentialsVersion || 1) + 1;
         if (isReplacement && canUseAdminSupabase()) {
           const { data: replaced, error } = await getAdminSupabaseClient().rpc("replace_live_source_input", {
@@ -1259,6 +1275,9 @@ const server = createServer(async (request, response) => {
           ingestUrl: currentSource.ingestUrl,
           ingestProtocol: currentSource.ingestProtocol,
           streamKey: replacement.streamKey,
+          ...("relayDestination" in replacement && replacement.relayDestination
+            ? { relayDestination: replacement.relayDestination }
+            : {}),
         });
       } catch {
         await logAudit(request, "rotate_credentials", id, "failure", before, { code: "ROTATION_FAILED" });
@@ -1433,7 +1452,7 @@ const server = createServer(async (request, response) => {
         await logAudit(request, "create_live_source", id, "failure", null, { code: "LIVE_INPUT_CREATE_FAILED" });
         return json(response, 502, {
           error: {
-            code: "CLOUDFLARE_LIVE_INPUT_CREATE_FAILED",
+            code: "LIVE_INPUT_CREATE_FAILED",
             message: "No fue posible crear la entrada de transmisión.",
             requestId,
           },
@@ -1445,7 +1464,7 @@ const server = createServer(async (request, response) => {
       newSource.ingestProtocol = liveInput.ingestProtocol;
       newSource.ingestUrl = liveInput.ingestUrl;
       newSource.playbackUrl = liveInput.playbackUrl || undefined;
-      newSource.playbackUrlVerified = liveInput.provider === "cloudflare_stream" && Boolean(liveInput.playbackUrl);
+      newSource.playbackUrlVerified = ["cloudflare_stream", "restream_cloudflare"].includes(liveInput.provider) && Boolean(liveInput.playbackUrl);
       newSource.playbackFormat = liveInput.playbackFormat;
       newSource.status = "waiting_signal";
       newSource.streamKeyLast4 = liveInput.streamKey.slice(-4);
@@ -1496,6 +1515,7 @@ const server = createServer(async (request, response) => {
           ingestProtocol: liveInput.ingestProtocol,
           streamKey: liveInput.streamKey,
         },
+        ...(liveInput.relayDestination ? { relayDestination: liveInput.relayDestination } : {}),
         replayed: false,
       });
     }
@@ -1555,12 +1575,12 @@ const server = createServer(async (request, response) => {
         currentSource.url = body.playbackUrl;
         currentSource.isExternal = ["youtube", "youtube_live", "embed", "iframe"].includes(currentSource.type);
         if (currentSource.isExternal) currentSource.embedUrl = body.playbackUrl;
-      } else if (body.playbackUrl !== undefined && currentSource.sourceKind === "obs" && currentSource.provider === "custom") {
+      } else if (body.playbackUrl !== undefined && currentSource.sourceKind === "obs" && currentSource.provider !== "cloudflare_stream") {
         const parsedUrl = new URL(body.playbackUrl);
         const storedKey = currentSource.streamKeyCiphertext || currentSource.obs?.streamKey;
         const rawKey = storedKey ? decryptSecret(storedKey) : "";
         if (parsedUrl.protocol !== "https:" || (rawKey && parsedUrl.pathname.includes(rawKey))) {
-          return json(response, 400, { error: "La reproducción custom exige una URL HTTPS independiente de la clave de publicación" });
+          return json(response, 400, { error: "La reproducción exige una URL HTTPS independiente de la clave de publicación" });
         }
         currentSource.playbackUrl = body.playbackUrl;
         currentSource.playbackUrlVerified = true;
