@@ -12,7 +12,7 @@ async function parseResponse<T>(res: Response): Promise<T> {
 }
 
 export function listAdminNews(token: string): Promise<NewsArticle[]> {
-  return fetch(`${API_BASE}/news`, {
+  return fetch(`${API_BASE}/admin/news`, {
     headers: { Authorization: `Bearer ${token}` },
   }).then(parseResponse<NewsArticle[]>);
 }

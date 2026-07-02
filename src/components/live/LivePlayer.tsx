@@ -34,6 +34,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   const { status, retry } = useLiveStream(source);
   const adapter = source ? pickAdapter(source) : "unsupported";
   const mediaControlsEnabled = status === "live" && (adapter === "hls" || adapter === "html5");
+  const isLive = match.status === "live" || match.status === "halftime";
 
   function handleSelect(v: string) {
     setSelectedStreamId(v);
@@ -47,7 +48,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   }
 
   return (
-    <div ref={containerRef} className="surface-card relative overflow-hidden rounded-xl shadow-glow">
+    <div ref={containerRef} className="surface-card relative min-w-0 overflow-hidden rounded-xl shadow-glow">
       <div className="relative aspect-[4/3] w-full bg-black sm:aspect-video">
         {renderPlayerBody({ status, adapter, source, retry, onSourceError: handleSourceError })}
 
@@ -56,23 +57,26 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
           <Scoreboard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competitionName={competitionName} />
         </div>
 
-        {/* Overlay (bottom) */}
-        <div className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-end gap-2 p-2 sm:justify-between sm:p-3 md:p-4">
-          <div className="pointer-events-auto flex items-center gap-2">
-            {match.streams.length > 1 ? (
+        {/* Standard full-width media controls */}
+        <div className="absolute inset-x-0 bottom-0 z-20">
+          <PlayerControls
+            containerRef={containerRef}
+            mediaControlsEnabled={mediaControlsEnabled}
+            mediaKey={source?.id}
+            isLive={isLive}
+            streamSwitcher={match.streams.length > 1 ? (
               <Select value={source?.id} onValueChange={handleSelect}>
-                <SelectTrigger className="h-9 w-[180px] bg-black/55 ring-1 ring-white/10" aria-label="Cambiar transmisión">
+                <SelectTrigger className="h-8 w-[170px] border-white/10 bg-white/10 text-xs text-white hover:bg-white/15" aria-label="Cambiar transmisión">
                   <SelectValue placeholder="Transmisión" />
                 </SelectTrigger>
                 <SelectContent>
-                  {match.streams.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                  {match.streams.map((stream) => (
+                    <SelectItem key={stream.id} value={stream.id}>{stream.title}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : null}
-          </div>
-          <PlayerControls containerRef={containerRef} mediaControlsEnabled={mediaControlsEnabled} />
+          />
         </div>
       </div>
     </div>

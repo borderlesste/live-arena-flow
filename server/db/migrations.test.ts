@@ -10,6 +10,7 @@ const protectedTables = [
   "chat_messages", "chat_moderation_actions", "audit_logs", "app_settings",
   "chat_message_reports",
   "user_favorite_matches",
+  "news",
   "live_sources",
   "live_source_webhook_events",
   "live_source_provider_cleanup_jobs",
@@ -49,6 +50,18 @@ describe("Supabase migrations", () => {
     await expect(db.exec(stabilization!.sql), "stabilization migration must be safe to resume").resolves.toBeDefined();
     const result = await db.query<{ count: number }>("select count(*)::int as count from pg_policies where schemaname = 'public'");
     expect(result.rows[0].count).toBeGreaterThanOrEqual(25);
+    const image = "data:image/png;base64,aGVsbG8=";
+    await db.query("insert into public.news (title, category, excerpt, image) values ($1, $2, $3, $4)", ["Final", "Resultado", "Resumen", image]);
+    await db.query("insert into public.sponsors (name, image, alt_text) values ($1, $2, $3)", ["Patrocinador", image, "Logo del patrocinador"]);
+    const persisted = await db.query<{ news_image: string; sponsor_image: string }>(`
+      select
+        (select image from public.news limit 1) as news_image,
+        (select image from public.sponsors limit 1) as sponsor_image
+    `);
+    expect(persisted.rows[0]).toEqual({ news_image: image, sponsor_image: image });
+    await expect(
+      db.query("insert into public.news (title, category, excerpt, image) values ($1, $2, $3, $4)", ["Ataque", "Otro", "No permitido", "data:image/svg+xml;base64,PHN2Zz4="]),
+    ).rejects.toThrow();
     await db.close();
   }, 20_000);
 

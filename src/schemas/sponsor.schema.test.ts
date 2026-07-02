@@ -23,6 +23,16 @@ describe("sponsor administration validation", () => {
     expect(sponsorAdminSchema.safeParse({ ...validSponsor, logoUrl: "http://cdn.example.com/logo.svg" }).success).toBe(false);
   });
 
+  it("accepts a persisted image without an external logo URL", () => {
+    const { logoUrl: _logoUrl, ...withoutUrl } = validSponsor;
+    expect(sponsorAdminSchema.safeParse({ ...withoutUrl, image: "data:image/png;base64,aGVsbG8=" }).success).toBe(true);
+  });
+
+  it("requires either a persisted image or an HTTPS logo URL", () => {
+    const { logoUrl: _logoUrl, ...withoutUrl } = validSponsor;
+    expect(sponsorAdminSchema.safeParse(withoutUrl).success).toBe(false);
+  });
+
   it("requires a start date for scheduled sponsors", () => {
     expect(sponsorAdminSchema.safeParse({ ...validSponsor, status: "scheduled" }).success).toBe(false);
   });

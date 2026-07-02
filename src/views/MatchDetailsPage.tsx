@@ -52,7 +52,7 @@ const MatchDetailsPage = () => {
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_400px]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {canShow ? (
             <div id={match.streams.length > 0 ? "replay" : "summary"}><LivePlayer match={playableMatch} homeTeam={home} awayTeam={away} competitionName={comp.name} /></div>
           ) : (

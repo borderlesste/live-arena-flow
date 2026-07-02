@@ -8,7 +8,7 @@ interface Html5PlayerProps {
 
 export function Html5Player({ src, audioOnly = false, poster, className, onError }: Html5PlayerProps) {
   if (audioOnly) {
-    return <audio src={src} controls onError={onError} className={className} aria-label="Reproductor de audio" />;
+    return <audio src={src} controls={false} onError={onError} className={className} aria-label="Reproductor de audio" />;
   }
   return (
     <video
@@ -16,7 +16,7 @@ export function Html5Player({ src, audioOnly = false, poster, className, onError
       poster={poster}
       muted
       playsInline
-      controls
+      controls={false}
       onError={onError}
       className={className}
       aria-label="Reproductor de vídeo"

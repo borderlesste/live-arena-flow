@@ -13,10 +13,11 @@ export function CompetitionCard({ competition }: Props) {
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="grid h-12 w-12 place-items-center rounded-lg font-display text-sm font-bold ring-1 ring-white/10"
+          className="relative grid h-12 w-12 place-items-center rounded-lg font-display text-sm font-bold ring-1 ring-white/10"
           style={{ background: `linear-gradient(135deg, hsl(${competition.color} / 0.45), hsl(${competition.color} / 0.1))` }}
         >
-          {competition.badgeUrl ? <img src={`${competition.badgeUrl}/tiny`} alt="" className="h-9 w-9 object-contain" loading="lazy" /> : competition.monogram}
+          <span>{competition.monogram}</span>
+          {competition.badgeUrl ? <img src={competition.badgeUrl} alt="" className="absolute h-9 w-9 object-contain" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-base font-semibold">{competition.name}</p>

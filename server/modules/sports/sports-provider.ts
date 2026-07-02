@@ -3,7 +3,7 @@ import { z } from "zod";
 export const normalizedSportsEventSchema = z.object({
   id: z.string().min(1),
   startsAt: z.string().datetime(),
-  sport: z.string().min(1),
+  sport: z.enum(["Football", "football", "Soccer", "soccer"]),
   competition: z.object({ id: z.string().min(1), name: z.string().min(1), region: z.string().optional(), badgeUrl: z.string().url().optional() }),
   homeTeam: z.object({ id: z.string().min(1), name: z.string().min(1), badgeUrl: z.string().url().optional() }),
   awayTeam: z.object({ id: z.string().min(1), name: z.string().min(1), badgeUrl: z.string().url().optional() }),

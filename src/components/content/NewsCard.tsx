@@ -5,13 +5,14 @@ import type { NewsArticle } from "@/types";
 interface Props { article: NewsArticle }
 
 export function NewsCard({ article }: Props) {
+  const imageSource = article.image ?? article.coverImageUrl;
   return (
     <article className="surface-card group flex flex-col gap-3 overflow-hidden rounded-xl">
       {/* Cover image / gradient fallback */}
       <div className="relative h-40 w-full overflow-hidden bg-surface-2">
-        {article.coverImageUrl ? (
+        {imageSource ? (
           <img
-            src={article.coverImageUrl}
+            src={imageSource}
             alt={article.title}
             loading="lazy"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -49,20 +50,21 @@ export function NewsCard({ article }: Props) {
 
 /** Compact thumbnail used in lists (admin panel, etc.) */
 export function NewsThumb({ article, className }: { article: NewsArticle; className?: string }) {
+  const imageSource = article.image ?? article.coverImageUrl;
   return (
     <div
       className={`relative h-full w-full overflow-hidden rounded-lg ${className ?? ""}`}
       style={
-        article.coverImageUrl
+        imageSource
           ? undefined
           : {
               background: `radial-gradient(circle at 40% 40%, hsl(${article.imageHue} 80% 55% / 0.5), hsl(${article.imageHue} 60% 25% / 0.3) 60%, hsl(215 30% 8%) 100%)`,
             }
       }
     >
-      {article.coverImageUrl ? (
+      {imageSource ? (
         <img
-          src={article.coverImageUrl}
+          src={imageSource}
           alt=""
           loading="lazy"
           className="h-full w-full object-cover"

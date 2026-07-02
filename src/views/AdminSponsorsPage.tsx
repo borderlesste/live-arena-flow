@@ -17,12 +17,13 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { sponsorAdminSchema, type ManagedSponsor } from "@/schemas/sponsor.schema";
 import { getSessionToken } from "@/services/auth.service";
 import { deleteManagedSponsor, listManagedSponsors, listSponsorMetrics, saveManagedSponsor, type SponsorMetrics } from "@/services/sponsors.service";
+import { imageFileToDataUrl } from "@/lib/image-file";
 
 const devices: ManagedSponsor["devices"] = ["mobile", "tablet", "desktop", "tv"];
 
 function emptySponsor(priority = 0): ManagedSponsor {
   return {
-    id: crypto.randomUUID(), name: "", logoUrl: "", altText: "", type: "partner", status: "draft",
+    id: crypto.randomUUID(), name: "", image: undefined, logoUrl: undefined, altText: "", type: "partner", status: "draft",
     priority, devices: [...devices], position: "homepage", utm: {},
   };
 }
@@ -85,6 +86,15 @@ export default function AdminSponsorsPage() {
 
   function reset() {
     setForm(emptySponsor(Math.max(0, ...sponsors.map((sponsor) => sponsor.priority)) + 1));
+  }
+
+  async function loadImage(file?: File) {
+    if (!file) return;
+    try {
+      update("image", await imageFileToDataUrl(file));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "No se pudo cargar la imagen");
+    }
   }
 
   async function save(candidate = form) {
@@ -153,7 +163,14 @@ export default function AdminSponsorsPage() {
           <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" />{sponsors.some((item) => item.id === form.id) ? "Editar patrocinador" : "Nuevo patrocinador"}</CardTitle><CardDescription>Los cambios activos se reflejan en el slider público.</CardDescription></CardHeader>
           <CardContent className="space-y-4">
             <Field label="Nombre"><Input value={form.name} onChange={(event) => update("name", event.target.value)} /></Field>
-            <Field label="Logo HTTPS"><Input type="url" value={form.logoUrl} onChange={(event) => update("logoUrl", event.target.value)} placeholder="https://cdn.example.com/logo.svg" /></Field>
+            <Field label="Imagen guardada en la base de datos">
+              <div className="space-y-2">
+                <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void loadImage(event.target.files?.[0])} />
+                <p className="text-xs text-muted-foreground">JPG, PNG o WebP. Máximo 512 KB.</p>
+                {form.image ? <div className="flex items-center gap-3"><img src={form.image} alt="Vista previa" className="h-16 w-28 rounded-md bg-white/5 object-contain" /><Button type="button" size="sm" variant="outline" onClick={() => update("image", undefined)}>Quitar</Button></div> : null}
+              </div>
+            </Field>
+            <Field label="Logo HTTPS alternativo"><Input type="url" value={form.logoUrl ?? ""} onChange={(event) => update("logoUrl", optionalText(event.target.value))} placeholder="https://cdn.example.com/logo.svg" /></Field>
             <Field label="Logo para fondo oscuro"><Input type="url" value={form.darkLogoUrl ?? ""} onChange={(event) => update("darkLogoUrl", event.target.value || undefined)} /></Field>
             <Field label="Texto alternativo"><Input value={form.altText} onChange={(event) => update("altText", event.target.value)} /></Field>
             <Field label="URL de destino"><Input type="url" value={form.destinationUrl ?? ""} onChange={(event) => update("destinationUrl", event.target.value || undefined)} /></Field>
@@ -183,7 +200,7 @@ export default function AdminSponsorsPage() {
             return <Card key={sponsor.id} draggable onDragStart={() => setDraggedId(sponsor.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => void drop(event, sponsor.id)} className="surface-card cursor-grab">
               <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
                 <GripVertical className="hidden h-5 w-5 text-muted-foreground lg:block" aria-label="Arrastrar para reordenar" />
-                <img src={sponsor.logoUrl} alt={sponsor.altText} className="h-14 w-24 rounded-md bg-white/5 object-contain" />
+                {sponsor.image || sponsor.logoUrl ? <img src={sponsor.image ?? sponsor.logoUrl} alt={sponsor.altText} className="h-14 w-24 rounded-md bg-white/5 object-contain" /> : <div className="grid h-14 w-24 place-items-center rounded-md bg-white/5 text-xs text-muted-foreground">Sin imagen</div>}
                 <div className="min-w-0 flex-1"><div className="flex flex-wrap gap-2"><p className="font-semibold">{sponsor.name}</p><Badge>{sponsor.status}</Badge><Badge variant="outline">{sponsor.type}</Badge></div><p className="truncate text-xs text-muted-foreground">{sponsor.campaign ?? "Sin campaña"} · prioridad {sponsor.priority}</p><div className="mt-2 flex gap-3 text-xs text-muted-foreground"><span>{metric.impressions} impresiones</span><span>{metric.clicks} clics</span><span>{metric.ctr.toFixed(2)}% CTR</span></div></div>
                 <div className="flex flex-wrap gap-1"><Button size="sm" variant="outline" onClick={() => void changeStatus(sponsor, sponsor.status === "active" ? "paused" : "active")}>{sponsor.status === "active" ? "Pausar" : "Activar"}</Button><Button size="icon" variant="ghost" aria-label="Editar" onClick={() => { setForm(sponsor); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" aria-label="Duplicar" onClick={() => void duplicate(sponsor)}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" aria-label="Eliminar" className="text-destructive" onClick={() => setDeleteId(sponsor.id)}><Trash2 className="h-4 w-4" /></Button></div>
               </CardContent>

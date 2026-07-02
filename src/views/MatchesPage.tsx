@@ -18,13 +18,13 @@ const MatchesPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const routeSport = searchParams.get("sport") as MatchFilter | null;
-  const [filter, setFilter] = useState<MatchFilter>(routeSport && ["football", "basketball", "baseball", "volleyball"].includes(routeSport) ? routeSport : "all");
+  const [filter, setFilter] = useState<MatchFilter>(routeSport === "football" ? "football" : "all");
   const { bundle, isLoading, isError, refetch } = useSportsWindow();
   const { matches, competitions, teams } = bundle;
   const getTeam = (id: string) => teams.find((team) => team.id === id)!;
 
   useEffect(() => {
-    if (routeSport && ["football", "basketball", "baseball", "volleyball"].includes(routeSport)) setFilter(routeSport);
+    if (routeSport === "football") setFilter("football");
   }, [routeSport]);
 
   const filtered = useMemo(() => {

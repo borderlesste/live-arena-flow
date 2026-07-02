@@ -10,4 +10,4 @@ export const matchStatusSchema = z.enum([
   "cancelled",
 ]);
 
-export const sportSchema = z.enum(["football", "basketball", "baseball", "volleyball", "other"]);
+export const sportSchema = z.literal("football");

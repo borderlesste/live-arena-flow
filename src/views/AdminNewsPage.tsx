@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { ErrorState, EmptyState } from "@/components/feedback/States";
 import { cn } from "@/lib/utils";
+import { imageFileToDataUrl } from "@/lib/image-file";
 import type { NewsArticle } from "@/types";
 
 const CATEGORIES = [
@@ -33,6 +34,7 @@ const DEFAULT_FORM: Omit<NewsArticle, "id"> = {
   category: "Crónica",
   excerpt: "",
   body: "",
+  image: undefined,
   coverImageUrl: "",
   publishedAt: new Date().toISOString().slice(0, 16),
   imageHue: Math.floor(Math.random() * 360),
@@ -92,6 +94,7 @@ const AdminNewsPage = () => {
       category: article.category,
       excerpt: article.excerpt,
       body: article.body ?? "",
+      image: article.image,
       coverImageUrl: article.coverImageUrl ?? "",
       publishedAt: article.publishedAt.slice(0, 16),
       imageHue: article.imageHue,
@@ -141,6 +144,18 @@ const AdminNewsPage = () => {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleImageFile(file?: File) {
+    if (!file) return;
+    try {
+      const image = await imageFileToDataUrl(file);
+      setForm((current) => ({ ...current, image }));
+      setErrors((current) => ({ ...current, image: undefined }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo cargar la imagen.";
+      setErrors((current) => ({ ...current, image: message }));
     }
   }
 
@@ -317,6 +332,26 @@ const AdminNewsPage = () => {
 
               {/* Imagen de portada */}
               <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="news-image">Imagen guardada en la base de datos</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="news-image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) => void handleImageFile(event.target.files?.[0])}
+                    className="max-w-md bg-surface-2 border-border/60"
+                  />
+                  {form.image ? (
+                    <Button type="button" variant="outline" onClick={() => setForm((current) => ({ ...current, image: undefined }))}>
+                      Quitar imagen
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="text-xs text-muted-foreground">JPG, PNG o WebP. Máximo 512 KB.</p>
+                {errors.image ? <p className="text-xs text-destructive" role="alert">{errors.image}</p> : null}
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="news-cover">
                   Imagen de portada{" "}
                   <span className="text-xs text-muted-foreground font-normal">(opcional — URL pública)</span>
@@ -340,9 +375,9 @@ const AdminNewsPage = () => {
                   </div>
                   {/* Preview thumbnail */}
                   <div className="shrink-0 h-16 w-24 rounded-lg overflow-hidden border border-border/60 bg-surface-2">
-                    {form.coverImageUrl?.trim() ? (
+                    {form.image || form.coverImageUrl?.trim() ? (
                       <img
-                        src={form.coverImageUrl.trim()}
+                        src={form.image ?? form.coverImageUrl?.trim()}
                         alt="Vista previa"
                         className="h-full w-full object-cover"
                         onError={(e) => {

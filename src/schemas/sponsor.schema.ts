@@ -1,11 +1,13 @@
 import { z } from "zod";
+import { optionalPersistedImageSchema } from "./image.schema.ts";
 
 const optionalHttpsUrl = z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL debe usar HTTPS").optional();
 
 export const sponsorAdminSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(2).max(120),
-  logoUrl: z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL debe usar HTTPS"),
+  image: optionalPersistedImageSchema,
+  logoUrl: optionalHttpsUrl,
   darkLogoUrl: optionalHttpsUrl,
   altText: z.string().trim().min(2).max(160),
   destinationUrl: optionalHttpsUrl,
@@ -25,6 +27,9 @@ export const sponsorAdminSchema = z.object({
   maxImpressions: z.number().int().positive().optional(),
   maxClicks: z.number().int().positive().optional(),
 }).superRefine((sponsor, context) => {
+  if (!sponsor.image && !sponsor.logoUrl) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["image"], message: "Carga una imagen o indica una URL HTTPS" });
+  }
   if (sponsor.startsAt && sponsor.endsAt && new Date(sponsor.endsAt) <= new Date(sponsor.startsAt)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["endsAt"], message: "La fecha final debe ser posterior al inicio" });
   }

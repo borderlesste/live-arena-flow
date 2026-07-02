@@ -1,5 +1,5 @@
 import { sponsorAdminSchema, type ManagedSponsor } from "@/schemas/sponsor.schema";
-import { sponsorFromRow, sponsorLegacyColumns, type SponsorRow } from "@/schemas/sponsor.persistence";
+import { sponsorFromRow, sponsorLegacyColumns, sponsorPublicColumns, type SponsorRow } from "@/schemas/sponsor.persistence";
 import { publicEnv } from "@/config/env";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { Sponsor } from "@/types";
@@ -42,7 +42,7 @@ function toPublicSponsor(sponsor: ManagedSponsor): Sponsor {
     name: sponsor.name,
     tagline: sponsor.description,
     url: sponsor.destinationUrl,
-    logoUrl: sponsor.logoUrl,
+    logoUrl: sponsor.image ?? sponsor.logoUrl,
     darkLogoUrl: sponsor.darkLogoUrl,
     altText: sponsor.altText,
     monogram: monogramFor(sponsor.name),
@@ -55,11 +55,23 @@ export async function listSponsors(): Promise<Sponsor[]> {
   if (!isSupabaseConfigured) return fetch(`${API_BASE}/sponsors`).then(responseJson<Sponsor[]>);
   const client = await getSupabaseClient();
   const { data, error }: { data: SponsorRow[] | null; error: { message: string; code?: string } | null } = await client.from("sponsors")
-    .select(sponsorLegacyColumns)
+    .select(sponsorPublicColumns)
     .eq("status", "active")
     .is("deleted_at", null)
     .order("priority", { ascending: false });
-  if (error) return fetch(`${API_BASE}/sponsors`).then(responseJson<Sponsor[]>);
+  if (error) {
+    const fallback = await client.from("sponsors")
+      .select(sponsorLegacyColumns)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .order("priority", { ascending: false });
+    if (fallback.error) return fetch(`${API_BASE}/sponsors`).then(responseJson<Sponsor[]>);
+    const now = Date.now();
+    return (fallback.data as unknown as SponsorRow[])
+      .filter((row) => (!row.starts_at || new Date(row.starts_at).getTime() <= now) && (!row.ends_at || new Date(row.ends_at).getTime() > now))
+      .map(sponsorFromRow)
+      .map(toPublicSponsor);
+  }
   const now = Date.now();
   return (data as unknown as SponsorRow[])
     .filter((row) => (!row.starts_at || new Date(row.starts_at).getTime() <= now) && (!row.ends_at || new Date(row.ends_at).getTime() > now))

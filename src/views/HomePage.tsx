@@ -86,7 +86,7 @@ const HomePage = () => {
       <section aria-label="Partido destacado" className="bg-gradient-hero">
         <div className="container mx-auto px-4 py-6 md:px-6 lg:py-8">
           <div className="grid gap-4 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_400px] lg:gap-6">
-            <div className="flex flex-col gap-4">
+            <div className="flex min-w-0 flex-col gap-4">
               <LivePlayer
                 match={playableMatch!}
                 homeTeam={homeTeam}

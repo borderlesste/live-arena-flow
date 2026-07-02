@@ -23,6 +23,11 @@ describe("mapSportsEvents", () => {
     expect(mapSportsEvents([event], [source]).matches[0].streams[0].title).toBe("OBS principal");
   });
 
+  it("discards every non-football event", () => {
+    const foreignSport = { ...event, sport: "Basketball" } as unknown as NormalizedSportsEvent;
+    expect(mapSportsEvents([foreignSport])).toEqual({ matches: [], teams: [], competitions: [] });
+  });
+
   it("does not load an OBS manifest until the provider reports a live signal", () => {
     const source = {
       id: "source-obs",

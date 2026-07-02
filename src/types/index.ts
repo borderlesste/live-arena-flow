@@ -148,6 +148,8 @@ export interface NewsArticle {
   excerpt: string;
   /** Full article body (markdown or plain text). Optional for backward compat. */
   body?: string;
+  /** Image persisted in the news table as a validated data URL. */
+  image?: string;
   /** Cover image URL. When absent, a gradient using imageHue is shown instead. */
   coverImageUrl?: string;
   publishedAt: string;

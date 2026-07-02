@@ -3,7 +3,8 @@ import { sponsorAdminSchema, type ManagedSponsor } from "./sponsor.schema.ts";
 export interface SponsorRow {
   id: string;
   name: string;
-  logo_url: string;
+  image?: string | null;
+  logo_url: string | null;
   dark_logo_url: string | null;
   alt_text: string;
   destination_url: string | null;
@@ -24,7 +25,8 @@ export interface SponsorRow {
   max_clicks?: number | null;
 }
 
-export const sponsorColumns = "id,name,logo_url,dark_logo_url,alt_text,destination_url,description,sponsor_type,status,priority,starts_at,ends_at,enabled_devices,placement,campaign,competition_id,match_id,stream_id,utm,max_impressions,max_clicks";
+export const sponsorColumns = "id,name,image,logo_url,dark_logo_url,alt_text,destination_url,description,sponsor_type,status,priority,starts_at,ends_at,enabled_devices,placement,campaign,competition_id,match_id,stream_id,utm,max_impressions,max_clicks";
+export const sponsorPublicColumns = "id,name,image,logo_url,dark_logo_url,alt_text,destination_url,description,status,priority,starts_at,ends_at";
 export const sponsorLegacyColumns = "id,name,logo_url,dark_logo_url,alt_text,destination_url,description,status,priority,starts_at,ends_at";
 
 export function isMissingSponsorColumn(error: { message?: string; code?: string } | null) {
@@ -43,7 +45,8 @@ export function sponsorFromRow(row: SponsorRow): ManagedSponsor {
   return sponsorAdminSchema.parse({
     id: row.id,
     name: row.name,
-    logoUrl: row.logo_url,
+    image: row.image ?? undefined,
+    logoUrl: row.logo_url ?? undefined,
     darkLogoUrl: row.dark_logo_url ?? undefined,
     altText: row.alt_text,
     destinationUrl: row.destination_url ?? undefined,
@@ -69,7 +72,8 @@ export function sponsorToRow(sponsor: ManagedSponsor) {
   return {
     id: sponsor.id,
     name: sponsor.name,
-    logo_url: sponsor.logoUrl,
+    image: sponsor.image ?? null,
+    logo_url: sponsor.logoUrl ?? null,
     dark_logo_url: sponsor.darkLogoUrl ?? null,
     alt_text: sponsor.altText,
     destination_url: sponsor.destinationUrl ?? null,
@@ -96,7 +100,7 @@ export function sponsorToLegacyRow(sponsor: ManagedSponsor) {
   return {
     id: sponsor.id,
     name: sponsor.name,
-    logo_url: sponsor.logoUrl,
+    logo_url: sponsor.logoUrl ?? null,
     dark_logo_url: sponsor.darkLogoUrl ?? null,
     alt_text: sponsor.altText,
     destination_url: sponsor.destinationUrl ?? null,

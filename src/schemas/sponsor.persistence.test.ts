@@ -5,6 +5,7 @@ import type { ManagedSponsor } from "./sponsor.schema";
 const sponsor: ManagedSponsor = {
   id: "125c1b37-f4ac-448d-ac98-722c398952ac",
   name: "Arena Partner",
+  image: "data:image/png;base64,aGVsbG8=",
   logoUrl: "https://cdn.example.com/logo.svg",
   darkLogoUrl: "https://cdn.example.com/logo-dark.svg",
   altText: "Logo de Arena Partner",
@@ -32,6 +33,7 @@ describe("sponsor persistence mapping", () => {
 
     expect(row).toMatchObject({
       sponsor_type: "official",
+      image: sponsor.image,
       enabled_devices: ["mobile", "desktop"],
       placement: "homepage-hero",
       campaign: "final-2026",

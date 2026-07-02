@@ -8,10 +8,11 @@ import { createSportsProvider, sportsProviderDiagnostics } from "./modules/sport
 import { hasSupabaseRole } from "./modules/auth/authorization.js";
 import { selectSupabasePublicKey } from "./modules/auth/supabase-key.js";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import type { StreamSource } from "../src/types/index.js";
+import type { NewsArticle, StreamSource } from "../src/types/index.js";
 import { embedUrlSchema, mediaUrlSchema } from "../src/schemas/stream.schema.js";
 import { sponsorAdminSchema, type ManagedSponsor } from "../src/schemas/sponsor.schema.js";
 import { isMissingSponsorColumn, sponsorColumns, sponsorFromRow, sponsorLegacyColumns, sponsorToLegacyRow, sponsorToRow, type SponsorRow } from "../src/schemas/sponsor.persistence.ts";
+import { optionalPersistedImageSchema } from "../src/schemas/image.schema.js";
 import { getLiveStreamProvider } from "./modules/streaming/index.js";
 import { CloudflareStreamProvider, getCloudflareStreamConfig } from "./modules/streaming/cloudflare.provider.js";
 import { RestreamProvider, getRestreamConfig } from "./modules/streaming/restream.provider.js";
@@ -143,7 +144,8 @@ const videoSourceSchema = streamPayloadBaseSchema.extend({
   createdAt: z.string(),
 }).superRefine(validateStreamPayload).superRefine(validateObsIngest);
 const managedStreamSchema = streamPayloadBaseSchema.superRefine(validateStreamPayload).superRefine(validateObsIngest);
-const newsSchema = z.object({ id: z.string().min(1), title: z.string().min(1).max(200), category: z.string().min(1).max(60), excerpt: z.string().min(1).max(400), body: z.string().max(20000).optional(), coverImageUrl: z.string().url().optional().or(z.literal("")), publishedAt: z.string().datetime(), imageHue: z.number().int().min(0).max(360) });
+const optionalHttpsUrlSchema = z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL debe usar HTTPS").optional().or(z.literal(""));
+const newsSchema = z.object({ id: z.string().uuid(), title: z.string().min(1).max(200), category: z.string().min(1).max(60), excerpt: z.string().min(1).max(400), body: z.string().max(20000).optional(), image: optionalPersistedImageSchema, coverImageUrl: optionalHttpsUrlSchema, publishedAt: z.string().datetime(), imageHue: z.number().int().min(0).max(360) });
 const highlightSchema = z.object({ id: z.string(), title: z.string(), matchId: z.string().optional(), durationSec: z.number(), publishedAt: z.string(), imageHue: z.number(), kind: z.enum(["summary", "play", "clip", "interview", "replay"]) });
 const chatSchema = z.object({ text: z.string().trim().min(1).max(280), channel: z.enum(["community", "official"]), clientId: z.string().min(1).max(80), displayName: z.string().min(1).max(40) });
 const contactSchema = z.object({
@@ -585,6 +587,7 @@ function normalizeManagedSponsor(sponsor: Awaited<ReturnType<typeof readStore>>[
   return {
     id: sponsor.id,
     name: sponsor.name,
+    image: sponsor.image,
     logoUrl: sponsor.logoUrl ?? "https://placehold.co/320x160/png",
     darkLogoUrl: sponsor.darkLogoUrl,
     altText: sponsor.altText ?? `Logo de ${sponsor.name}`,
@@ -607,10 +610,9 @@ function normalizeManagedSponsor(sponsor: Awaited<ReturnType<typeof readStore>>[
   };
 }
 
-function publicSponsors(sponsors: Awaited<ReturnType<typeof readStore>>["sponsors"]) {
+function managedSponsorsToPublic(sponsors: ManagedSponsor[]) {
   const now = Date.now();
   return sponsors
-    .map(normalizeManagedSponsor)
     .filter((sponsor) => sponsor.status === "active"
       && (!sponsor.startsAt || new Date(sponsor.startsAt).getTime() <= now)
       && (!sponsor.endsAt || new Date(sponsor.endsAt).getTime() > now))
@@ -620,13 +622,22 @@ function publicSponsors(sponsors: Awaited<ReturnType<typeof readStore>>["sponsor
       name: sponsor.name,
       tagline: sponsor.description,
       url: sponsor.destinationUrl,
-      logoUrl: sponsor.logoUrl,
+      logoUrl: sponsor.image ?? sponsor.logoUrl,
       darkLogoUrl: sponsor.darkLogoUrl,
       altText: sponsor.altText,
       monogram: sponsorMonogram(sponsor.name),
       color: sponsorColor(sponsor.id),
       tier: sponsor.type,
     }));
+}
+
+function publicSponsors(sponsors: Awaited<ReturnType<typeof readStore>>["sponsors"]) {
+  return managedSponsorsToPublic(sponsors.map(normalizeManagedSponsor));
+}
+
+async function listPublicSponsorsPayload() {
+  if (!canUseAdminSupabase()) return publicSponsors((await readStore()).sponsors);
+  return managedSponsorsToPublic(await listManagedSponsorsPayload());
 }
 
 async function listManagedSponsorsPayload(): Promise<ManagedSponsor[]> {
@@ -672,6 +683,9 @@ async function saveManagedSponsorPayload(sponsor: ManagedSponsor): Promise<Manag
     .from("sponsors")
     .upsert(sponsorToRow(sponsor), { onConflict: "id" });
   if (isMissingSponsorColumn(error)) {
+    if (sponsor.image) {
+      throw new Error("La columna image de sponsors no está disponible. Ejecuta las migraciones de Supabase.");
+    }
     const fallback = await supabase
       .from("sponsors")
       .upsert(sponsorToLegacyRow(sponsor), { onConflict: "id" });
@@ -680,6 +694,95 @@ async function saveManagedSponsorPayload(sponsor: ManagedSponsor): Promise<Manag
   }
   if (error) throw error;
   return listManagedSponsorsPayload();
+}
+
+interface NewsRow {
+  id: string;
+  title: string;
+  category: string;
+  excerpt: string;
+  body: string | null;
+  image: string | null;
+  cover_image_url: string | null;
+  published_at: string;
+  image_hue: number;
+}
+
+const newsColumns = "id,title,category,excerpt,body,image,cover_image_url,published_at,image_hue";
+
+function newsFromRow(row: NewsRow): NewsArticle {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    excerpt: row.excerpt,
+    body: row.body ?? undefined,
+    image: row.image ?? undefined,
+    coverImageUrl: row.cover_image_url ?? undefined,
+    publishedAt: row.published_at,
+    imageHue: row.image_hue,
+  };
+}
+
+function newsToRow(article: NewsArticle) {
+  return {
+    id: article.id,
+    title: article.title,
+    category: article.category,
+    excerpt: article.excerpt,
+    body: article.body ?? null,
+    image: article.image ?? null,
+    cover_image_url: article.coverImageUrl || null,
+    published_at: article.publishedAt,
+    image_hue: article.imageHue,
+    deleted_at: null,
+  };
+}
+
+async function listNewsPayload(includeUnpublished = false): Promise<NewsArticle[]> {
+  if (!canUseAdminSupabase()) {
+    const articles = (await readStore()).news;
+    const now = Date.now();
+    return articles
+      .filter((article) => includeUnpublished || new Date(article.publishedAt).getTime() <= now)
+      .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  }
+
+  let query = getAdminSupabaseClient()
+    .from("news")
+    .select(newsColumns)
+    .is("deleted_at", null)
+    .order("published_at", { ascending: false });
+  if (!includeUnpublished) query = query.lte("published_at", new Date().toISOString());
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as unknown as NewsRow[]).map(newsFromRow);
+}
+
+async function saveNewsPayload(article: NewsArticle): Promise<NewsArticle[]> {
+  if (!canUseAdminSupabase()) {
+    const data = await updateStore((store) => {
+      const index = store.news.findIndex((item) => item.id === article.id);
+      if (index >= 0) store.news[index] = article;
+      else store.news.push(article);
+    });
+    return data.news.sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  }
+  const { error } = await getAdminSupabaseClient().from("news").upsert(newsToRow(article), { onConflict: "id" });
+  if (error) throw error;
+  return listNewsPayload(true);
+}
+
+async function deleteNewsPayload(id: string): Promise<NewsArticle[]> {
+  if (!canUseAdminSupabase()) {
+    const data = await updateStore((store) => { store.news = store.news.filter((item) => item.id !== id); });
+    return data.news.sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  }
+  const { error } = await getAdminSupabaseClient().from("news")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  return listNewsPayload(true);
 }
 
 async function deleteManagedSponsorPayload(id: string): Promise<ManagedSponsor[]> {
@@ -1798,7 +1901,7 @@ const server = createServer(async (request, response) => {
       return json(response, 200, managedStreams(data.streams));
     }
 
-    if (request.method === "GET" && url.pathname === "/api/sponsors") return json(response, 200, publicSponsors((await readStore()).sponsors));
+    if (request.method === "GET" && url.pathname === "/api/sponsors") return json(response, 200, await listPublicSponsorsPayload());
     if (request.method === "GET" && url.pathname === "/api/admin/sponsors") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       return json(response, 200, await listManagedSponsorsPayload());
@@ -1813,6 +1916,26 @@ const server = createServer(async (request, response) => {
     if (request.method === "DELETE" && sponsorMatch) {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       return json(response, 200, await deleteManagedSponsorPayload(sponsorMatch[1]));
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/news") {
+      return json(response, 200, await listNewsPayload(false));
+    }
+    if (request.method === "GET" && url.pathname === "/api/admin/news") {
+      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      return json(response, 200, await listNewsPayload(true));
+    }
+    const newsMatch = url.pathname.match(/^\/api\/admin\/news\/([^/]+)$/);
+    if (newsMatch && request.method === "PUT") {
+      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      const article = newsSchema.parse(await readBody(request));
+      if (article.id !== newsMatch[1]) return json(response, 400, { error: "El ID de la noticia no coincide con la ruta" });
+      return json(response, 200, await saveNewsPayload(article));
+    }
+    if (newsMatch && request.method === "DELETE") {
+      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      const id = z.string().uuid().parse(newsMatch[1]);
+      return json(response, 200, await deleteNewsPayload(id));
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/users") {
@@ -1902,7 +2025,6 @@ const server = createServer(async (request, response) => {
       }
     }
 
-    if (await handleCollection(request, response, url.pathname, "news", newsSchema) !== false) return;
     if (await handleCollection(request, response, url.pathname, "highlights", highlightSchema) !== false) return;
 
     if (request.method === "GET" && url.pathname === "/api/chat/messages") {
