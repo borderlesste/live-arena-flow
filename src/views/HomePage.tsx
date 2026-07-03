@@ -4,6 +4,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LiveMatchCard } from "@/components/matches/LiveMatchCard";
 import { UpcomingMatchCard } from "@/components/matches/UpcomingMatchCard";
 import { ResultCard } from "@/components/matches/ResultCard";
+import { AgendaMatchCard } from "@/components/matches/AgendaMatchCard";
 import { MatchFilters, type MatchFilter } from "@/components/matches/MatchFilters";
 import { SponsorCarousel, SponsorLogo } from "@/components/sponsors/SponsorCarousel";
 import { AdvertisementSlot } from "@/components/sponsors/AdvertisementSlot";
@@ -232,11 +233,37 @@ const HomePage = () => {
             {allCompetitions.slice(0, 3).map((c) => <CompetitionCard key={c.id} competition={c} />)}
           </div>
         </div>
-        <div>
+        <div className="space-y-4">
           <div className="surface-card rounded-xl p-6">
             <p className="text-xs uppercase tracking-wider text-primary">SportSRC</p>
             <p className="mt-1 font-display text-xl font-bold">Datos deportivos conectados</p>
             <p className="mt-2 text-sm text-muted-foreground">{bundle.matches.length} eventos, {bundle.teams.length} equipos y {bundle.competitions.length} competiciones cargados desde la API.</p>
+          </div>
+          <div>
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-primary">Partidos programados</p>
+                <h3 className="font-display text-xl font-bold">Agenda destacada</h3>
+              </div>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/calendar">Ver calendario <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" /></Link>
+              </Button>
+            </div>
+            {upcoming.length === 0 ? (
+              <EmptyState title="Sin partidos programados" description="La agenda se actualizará cuando el proveedor publique nuevos encuentros." />
+            ) : (
+              <div className="space-y-3">
+                {upcoming.slice(0, 3).map((match) => (
+                  <AgendaMatchCard
+                    key={match.id}
+                    match={match}
+                    homeTeam={getTeam(match.homeTeamId)}
+                    awayTeam={getTeam(match.awayTeamId)}
+                    competition={allCompetitions.find((item) => item.id === match.competitionId)!}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -249,7 +276,7 @@ const HomePage = () => {
             <Button asChild variant="outline" size="sm"><Link to="/noticias">Ver todas <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" /></Link></Button>
           </div>
           {allNews.length === 0 ? <EmptyState title="Sin noticias publicadas" description="El contenido aparecerá cuando se publique desde el backend." /> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {latestNews.slice(0, 6).map((n) => <NewsCard key={n.id} article={n} onRead={setSelectedNews} />)}
+            {latestNews.slice(0, 3).map((n) => <NewsCard key={n.id} article={n} onRead={setSelectedNews} />)}
           </div>}
         </div>
         <AdvertisementSlot
