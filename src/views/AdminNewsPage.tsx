@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
@@ -36,6 +37,8 @@ const DEFAULT_FORM: Omit<NewsArticle, "id"> = {
   body: "",
   image: undefined,
   coverImageUrl: "",
+  isSponsored: false,
+  sponsorName: undefined,
   publishedAt: new Date().toISOString().slice(0, 16),
   imageHue: Math.floor(Math.random() * 360),
 };
@@ -96,6 +99,8 @@ const AdminNewsPage = () => {
       body: article.body ?? "",
       image: article.image,
       coverImageUrl: article.coverImageUrl ?? "",
+      isSponsored: article.isSponsored === true,
+      sponsorName: article.sponsorName,
       publishedAt: article.publishedAt.slice(0, 16),
       imageHue: article.imageHue,
     });
@@ -118,6 +123,7 @@ const AdminNewsPage = () => {
     if (form.excerpt.length > 400) e.excerpt = "Máximo 400 caracteres.";
     if (!form.category.trim()) e.category = "Selecciona una categoría.";
     if (!form.publishedAt) e.publishedAt = "Indica la fecha de publicación.";
+    if (form.isSponsored && !form.sponsorName?.trim()) e.sponsorName = "Indica el nombre del patrocinador.";
     if (form.coverImageUrl && form.coverImageUrl.trim()) {
       try { new URL(form.coverImageUrl.trim()); }
       catch { e.coverImageUrl = "Introduce una URL válida (https://...)."; }
@@ -133,6 +139,8 @@ const AdminNewsPage = () => {
       id: editingId ?? crypto.randomUUID(),
       ...form,
       coverImageUrl: form.coverImageUrl?.trim() || undefined,
+      isSponsored: form.isSponsored === true,
+      sponsorName: form.isSponsored ? form.sponsorName?.trim() : undefined,
       publishedAt: new Date(form.publishedAt).toISOString(),
     };
     try {
@@ -283,6 +291,39 @@ const AdminNewsPage = () => {
                   className={cn("bg-surface-2 border-border/60", errors.publishedAt && "border-destructive")}
                 />
                 {errors.publishedAt && <p className="text-xs text-destructive" role="alert">{errors.publishedAt}</p>}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border/60 bg-surface-2 p-4 sm:col-span-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label htmlFor="news-sponsored">Contenido patrocinado</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Actívalo cuando exista pago, apoyo material o interés comercial.</p>
+                  </div>
+                  <Switch
+                    id="news-sponsored"
+                    checked={form.isSponsored === true}
+                    onCheckedChange={(checked) => setForm((current) => ({
+                      ...current,
+                      isSponsored: checked,
+                      sponsorName: checked ? current.sponsorName : undefined,
+                    }))}
+                  />
+                </div>
+                {form.isSponsored ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="news-sponsor-name">Nombre del patrocinador <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="news-sponsor-name"
+                      value={form.sponsorName ?? ""}
+                      onChange={(event) => setForm((current) => ({ ...current, sponsorName: event.target.value }))}
+                      placeholder="Empresa o marca patrocinadora"
+                      maxLength={120}
+                      className={cn("bg-background border-border/60", errors.sponsorName && "border-destructive")}
+                      aria-describedby={errors.sponsorName ? "news-sponsor-name-error" : undefined}
+                    />
+                    {errors.sponsorName ? <p id="news-sponsor-name-error" className="text-xs text-destructive" role="alert">{errors.sponsorName}</p> : null}
+                  </div>
+                ) : null}
               </div>
 
               {/* Resumen */}
@@ -482,6 +523,7 @@ const AdminNewsPage = () => {
                           <Badge variant="outline" className="text-[10px] uppercase tracking-wider shrink-0">
                             {article.category}
                           </Badge>
+                          {article.isSponsored ? <Badge className="shrink-0 bg-amber-500 text-black hover:bg-amber-500">Contenido patrocinado</Badge> : null}
                           <span className="text-xs text-muted-foreground">
                             {new Date(article.publishedAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                           </span>

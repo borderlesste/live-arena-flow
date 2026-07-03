@@ -3,7 +3,7 @@
  * Uses jsdom + @testing-library/react — no real HTTP calls or stream keys.
  */
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SourceGeneralForm } from "@/components/admin/StreamAdminComponents";
 import { ObsPublishingOptions } from "@/components/admin/StreamAdminComponents";
@@ -149,6 +149,23 @@ describe("SourceGeneralForm", () => {
     const picker = screen.getByRole("combobox", { name: /partido/i });
     expect(picker).toHaveClass("min-w-0", "overflow-hidden");
     expect(picker.querySelector("span")).toHaveClass("min-w-0", "truncate");
+  });
+
+  it("expands the match menu to the left and shows complete team names", async () => {
+    render(
+      <SourceGeneralForm
+        {...defaultFormProps}
+        matches={[testMatch, secondTestMatch]}
+        eventLabel={(id) => id === "m1" ? "Deportes Puerto Montt vs Rangers" : "Colo-Colo vs Universidad de Chile"}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: /partido/i }));
+    const search = screen.getByRole("combobox", { name: /buscar partido/i });
+    const content = search.closest("[data-radix-popper-content-wrapper]")?.firstElementChild;
+    expect(content).toHaveClass("max-w-[34rem]", "sm:w-[34rem]");
+    expect(within(content as HTMLElement).getByText("Deportes Puerto Montt vs Rangers")).toHaveClass("whitespace-normal");
+    expect(within(content as HTMLElement).getByText("Colo-Colo vs Universidad de Chile")).toHaveClass("whitespace-normal");
   });
 
   it("hides the URL field when OBS is enabled", () => {

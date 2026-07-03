@@ -145,7 +145,26 @@ const videoSourceSchema = streamPayloadBaseSchema.extend({
 }).superRefine(validateStreamPayload).superRefine(validateObsIngest);
 const managedStreamSchema = streamPayloadBaseSchema.superRefine(validateStreamPayload).superRefine(validateObsIngest);
 const optionalHttpsUrlSchema = z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL debe usar HTTPS").optional().or(z.literal(""));
-const newsSchema = z.object({ id: z.string().uuid(), title: z.string().min(1).max(200), category: z.string().min(1).max(60), excerpt: z.string().min(1).max(400), body: z.string().max(20000).optional(), image: optionalPersistedImageSchema, coverImageUrl: optionalHttpsUrlSchema, publishedAt: z.string().datetime(), imageHue: z.number().int().min(0).max(360) });
+const newsSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1).max(200),
+  category: z.string().min(1).max(60),
+  excerpt: z.string().min(1).max(400),
+  body: z.string().max(20000).optional(),
+  image: optionalPersistedImageSchema,
+  coverImageUrl: optionalHttpsUrlSchema,
+  isSponsored: z.boolean().default(false),
+  sponsorName: z.string().trim().min(1).max(120).optional(),
+  publishedAt: z.string().datetime(),
+  imageHue: z.number().int().min(0).max(360),
+}).superRefine((article, context) => {
+  if (article.isSponsored && !article.sponsorName) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["sponsorName"], message: "Indica el patrocinador del contenido" });
+  }
+  if (!article.isSponsored && article.sponsorName) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["sponsorName"], message: "El patrocinador solo aplica a contenido patrocinado" });
+  }
+});
 const highlightSchema = z.object({ id: z.string(), title: z.string(), matchId: z.string().optional(), durationSec: z.number(), publishedAt: z.string(), imageHue: z.number(), kind: z.enum(["summary", "play", "clip", "interview", "replay"]) });
 const chatSchema = z.object({ text: z.string().trim().min(1).max(280), channel: z.enum(["community", "official"]), clientId: z.string().min(1).max(80), displayName: z.string().min(1).max(40) });
 const contactSchema = z.object({
@@ -704,11 +723,13 @@ interface NewsRow {
   body: string | null;
   image: string | null;
   cover_image_url: string | null;
+  is_sponsored: boolean;
+  sponsor_name: string | null;
   published_at: string;
   image_hue: number;
 }
 
-const newsColumns = "id,title,category,excerpt,body,image,cover_image_url,published_at,image_hue";
+const newsColumns = "id,title,category,excerpt,body,image,cover_image_url,is_sponsored,sponsor_name,published_at,image_hue";
 
 function newsFromRow(row: NewsRow): NewsArticle {
   return {
@@ -719,6 +740,8 @@ function newsFromRow(row: NewsRow): NewsArticle {
     body: row.body ?? undefined,
     image: row.image ?? undefined,
     coverImageUrl: row.cover_image_url ?? undefined,
+    isSponsored: row.is_sponsored,
+    sponsorName: row.sponsor_name ?? undefined,
     publishedAt: row.published_at,
     imageHue: row.image_hue,
   };
@@ -733,6 +756,8 @@ function newsToRow(article: NewsArticle) {
     body: article.body ?? null,
     image: article.image ?? null,
     cover_image_url: article.coverImageUrl || null,
+    is_sponsored: article.isSponsored === true,
+    sponsor_name: article.isSponsored ? article.sponsorName?.trim() || null : null,
     published_at: article.publishedAt,
     image_hue: article.imageHue,
     deleted_at: null,
@@ -741,7 +766,11 @@ function newsToRow(article: NewsArticle) {
 
 async function listNewsPayload(includeUnpublished = false): Promise<NewsArticle[]> {
   if (!canUseAdminSupabase()) {
-    const articles = (await readStore()).news;
+    const articles = (await readStore()).news.map((article) => ({
+      ...article,
+      isSponsored: article.isSponsored === true,
+      sponsorName: article.isSponsored ? article.sponsorName : undefined,
+    }));
     const now = Date.now();
     return articles
       .filter((article) => includeUnpublished || new Date(article.publishedAt).getTime() <= now)

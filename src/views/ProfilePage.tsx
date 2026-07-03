@@ -123,7 +123,7 @@ const ProfilePage = () => {
           <div className="mt-10 grid gap-3 sm:grid-cols-2">
             <Benefit icon={Bell} title="Alertas reales" description="Avisos del navegador antes del inicio." />
             <Benefit icon={CalendarDays} title="Tus partidos" description="Consulta en el perfil los eventos que sigues." />
-            <Benefit icon={ShieldCheck} title="Sesión segura" description="Autenticación y sesiones gestionadas por Supabase Auth." />
+            <Benefit icon={ShieldCheck} title="Cuenta protegida" description="Tu acceso y tus datos se gestionan de forma segura." />
           </div>
         </div>
 

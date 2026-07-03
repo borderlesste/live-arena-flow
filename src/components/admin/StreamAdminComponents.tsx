@@ -93,7 +93,12 @@ function MatchCombobox({
           <ChevronsUpDown className="shrink-0 opacity-50" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        collisionPadding={16}
+        className="w-[calc(100vw-2rem)] max-w-[34rem] p-0 sm:w-[34rem]"
+      >
         <Command label="Buscar partido">
           <CommandInput placeholder="Buscar por equipo o ID..." />
           <CommandList>
@@ -111,7 +116,7 @@ function MatchCombobox({
                     }}
                   >
                     <Check className={cn("mr-2", selectedMatchId === match.id ? "opacity-100" : "opacity-0")} />
-                    <span className="truncate">{label}</span>
+                    <span className="whitespace-normal text-left leading-snug">{label}</span>
                   </CommandItem>
                 );
               })}

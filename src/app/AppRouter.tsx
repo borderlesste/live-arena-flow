@@ -18,6 +18,7 @@ const CalendarPage = lazy(() => import("@/views/CalendarPage"));
 const ResultsPage = lazy(() => import("@/views/ResultsPage"));
 const MatchDetailsPage = lazy(() => import("@/views/MatchDetailsPage"));
 const ProfilePage = lazy(() => import("@/views/ProfilePage"));
+const NewsPage = lazy(() => import("@/views/NewsPage"));
 const AdminPage = lazy(() => import("@/views/AdminPage"));
 const AdminSponsorsPage = lazy(() => import("@/views/AdminSponsorsPage"));
 const AdminOperationsPage = lazy(() => import("@/views/AdminOperationsPage"));
@@ -73,6 +74,7 @@ export function AppRouter() {
             <Route path="/results" element={<ResultsPage />} />
             <Route path="/match/:id" element={<MatchDetailsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/noticias" element={<NewsPage />} />
             <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
             <Route path="/auth/confirm" element={<AuthConfirmationPage />} />

@@ -60,6 +60,15 @@ describe("Supabase migrations", () => {
     `);
     expect(persisted.rows[0]).toEqual({ news_image: image, sponsor_image: image });
     await expect(
+      db.query(
+        "insert into public.news (title, category, excerpt, is_sponsored, sponsor_name) values ($1, $2, $3, true, $4)",
+        ["Contenido comercial", "Otro", "Resumen", "Marca Ejemplo"],
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      db.query("insert into public.news (title, category, excerpt, is_sponsored) values ($1, $2, $3, true)", ["Sin identificar", "Otro", "Resumen"]),
+    ).rejects.toThrow();
+    await expect(
       db.query("insert into public.news (title, category, excerpt, image) values ($1, $2, $3, $4)", ["Ataque", "Otro", "No permitido", "data:image/svg+xml;base64,PHN2Zz4="]),
     ).rejects.toThrow();
     await db.close();

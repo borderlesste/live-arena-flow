@@ -9,6 +9,7 @@ import { SponsorCarousel, SponsorLogo } from "@/components/sponsors/SponsorCarou
 import { AdvertisementSlot } from "@/components/sponsors/AdvertisementSlot";
 import { CompetitionCard } from "@/components/competitions/CompetitionCard";
 import { NewsCard } from "@/components/content/NewsCard";
+import { NewsArticleDialog } from "@/components/content/NewsArticleDialog";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { MessageCircle, ChevronRight, MapPin, CalendarDays, Bell, Share2 } from "lucide-react";
@@ -23,6 +24,7 @@ import { toast } from "sonner";
 import { formatMatchDate } from "@/lib/format";
 import { useFavoriteMatch } from "@/hooks/useFavoriteMatch";
 import { filterMatches } from "@/lib/match-filters";
+import type { NewsArticle } from "@/types";
 
 const HomePage = () => {
   useDocumentMeta({
@@ -32,6 +34,8 @@ const HomePage = () => {
 
   const { bundle, isLoading, isError, refetch } = useSportsWindow();
   const { news: allNews, sponsors: allSponsors, isLoading: isContentLoading } = useContentData();
+  const latestNews = useMemo(() => [...allNews].sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt)), [allNews]);
+  const [selectedNews, setSelectedNews] = useState<NewsArticle | null>(null);
   const live = bundle.matches.filter((match) => ["live", "halftime", "paused"].includes(match.status));
   const upcoming = bundle.matches.filter((match) => match.status === "scheduled").sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
   const finished = bundle.matches.filter((match) => match.status === "finished").sort((a, b) => +new Date(b.startsAt) - +new Date(a.startsAt));
@@ -242,9 +246,10 @@ const HomePage = () => {
         <div>
           <div className="mb-4 flex items-end justify-between gap-3">
             <h2 id="contenido" className="font-display text-2xl font-bold">Últimas noticias</h2>
+            <Button asChild variant="outline" size="sm"><Link to="/noticias">Ver todas <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" /></Link></Button>
           </div>
           {allNews.length === 0 ? <EmptyState title="Sin noticias publicadas" description="El contenido aparecerá cuando se publique desde el backend." /> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {allNews.slice(0, 6).map((n) => <NewsCard key={n.id} article={n} />)}
+            {latestNews.slice(0, 6).map((n) => <NewsCard key={n.id} article={n} onRead={setSelectedNews} />)}
           </div>}
         </div>
         <AdvertisementSlot
@@ -252,6 +257,7 @@ const HomePage = () => {
           sponsors={partnerSponsors.length > 0 ? partnerSponsors : allSponsors.slice(2)}
         />
       </section>
+      <NewsArticleDialog article={selectedNews} onOpenChange={(open) => { if (!open) setSelectedNews(null); }} />
     </div>
   );
 };

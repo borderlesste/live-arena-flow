@@ -152,6 +152,10 @@ export interface NewsArticle {
   image?: string;
   /** Cover image URL. When absent, a gradient using imageHue is shown instead. */
   coverImageUrl?: string;
+  /** Paid editorial content must be clearly disclosed to readers. */
+  isSponsored?: boolean;
+  /** Public sponsor name shown with the disclosure. */
+  sponsorName?: string;
   publishedAt: string;
   imageHue: number; // 0-360, used for generated cover gradient when no coverImageUrl
 }

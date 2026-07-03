@@ -11,6 +11,7 @@ const SECTIONS: { title: string; links: { to: string; label: string }[] }[] = [
       { to: "/competitions", label: "Competiciones" },
       { to: "/calendar", label: "Calendario" },
       { to: "/results", label: "Resultados" },
+      { to: "/noticias", label: "Noticias de fútbol" },
     ],
   },
   {

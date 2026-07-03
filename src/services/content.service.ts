@@ -9,5 +9,9 @@ async function list<T>(path: string): Promise<T[]> {
   return response.json();
 }
 
-export const listNews = () => list<NewsArticle>("news");
+export function sortNewsByNewest(articles: NewsArticle[]): NewsArticle[] {
+  return [...articles].sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt));
+}
+
+export const listNews = () => list<NewsArticle>("news").then(sortNewsByNewest);
 export const listHighlights = () => list<Highlight>("highlights");

@@ -1,10 +1,14 @@
 import { formatRelativeShort } from "@/lib/format";
-import { ImageOff } from "lucide-react";
+import { ArrowRight, ImageOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { NewsArticle } from "@/types";
 
-interface Props { article: NewsArticle }
+interface Props {
+  article: NewsArticle;
+  onRead?: (article: NewsArticle) => void;
+}
 
-export function NewsCard({ article }: Props) {
+export function NewsCard({ article, onRead }: Props) {
   const imageSource = article.image ?? article.coverImageUrl;
   return (
     <article className="surface-card group flex flex-col gap-3 overflow-hidden rounded-xl">
@@ -35,14 +39,27 @@ export function NewsCard({ article }: Props) {
         <span className="absolute left-3 top-3 rounded-md bg-black/50 px-2 py-0.5 text-[11px] uppercase tracking-wider ring-1 ring-white/10 text-white/90">
           {article.category}
         </span>
+        {article.isSponsored ? (
+          <span className="absolute right-3 top-3 rounded-md bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black">
+            Contenido patrocinado
+          </span>
+        ) : null}
       </div>
 
-      <div className="space-y-1 px-4 pb-4">
+      <div className="flex flex-1 flex-col px-4 pb-4">
+        {article.isSponsored ? <p className="mb-1 text-xs font-medium text-amber-400">Presentado por {article.sponsorName}</p> : null}
         <h3 className="font-display text-base font-semibold leading-snug group-hover:text-primary line-clamp-2">
           {article.title}
         </h3>
-        <p className="line-clamp-2 text-sm text-muted-foreground">{article.excerpt}</p>
-        <p className="text-xs text-muted-foreground">{formatRelativeShort(article.publishedAt)}</p>
+        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{article.excerpt}</p>
+        <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+          <p className="text-xs text-muted-foreground">{formatRelativeShort(article.publishedAt)}</p>
+          {onRead ? (
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 font-semibold" onClick={() => onRead(article)}>
+              Leer más <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       </div>
     </article>
   );
