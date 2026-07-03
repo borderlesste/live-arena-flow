@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import { readStore, updateStore, type StoreData, type StoredUser, type StoredVideoSource } from "./store.js";
 import { createSportsProvider, sportsProviderDiagnostics } from "./modules/sports/index.js";
+import { CatalogBackedSportsProvider } from "./modules/sports/catalog-backed.provider.js";
+import { SupabaseSportsCatalog } from "./modules/sports/sports-catalog.js";
 import { hasSupabaseRole } from "./modules/auth/authorization.js";
 import { selectSupabasePublicKey } from "./modules/auth/supabase-key.js";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
@@ -25,6 +27,7 @@ import {
   updateLiveSourceSchema,
   type LiveSourceStatus,
 } from "../src/schemas/live-source.schema.js";
+import { localMatchInputSchema } from "../src/schemas/local-match.schema.js";
 
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -35,7 +38,8 @@ const LEGACY_AUTH_ENABLED = process.env.NODE_ENV !== "production" && process.env
 const chatRateLimit = new Map<string, number>();
 const sensitiveActionRateLimit = new Map<string, { count: number; resetAt: number }>();
 const scryptAsync = promisify(scrypt);
-const sportsProvider = createSportsProvider();
+const sportsCatalog = canUseAdminSupabase() ? new SupabaseSportsCatalog(getAdminSupabaseClient()) : undefined;
+const sportsProvider = new CatalogBackedSportsProvider(createSportsProvider(), sportsCatalog);
 const VERSION = process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "local";
 
 interface StreamMetricAggregation {
@@ -293,6 +297,7 @@ async function logAudit(
   result: "success" | "denied" | "failure",
   before?: unknown,
   after?: unknown,
+  entityType = "live_sources",
 ) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
   let actorId: string | null = null;
@@ -316,7 +321,7 @@ async function logAudit(
       await supa.from("audit_logs").insert({
         actor_id: actorId,
         action,
-        entity_type: "live_sources",
+        entity_type: entityType,
         entity_id: entityId.match(/^[0-9a-fA-F-]{36}$/) ? entityId : null,
         before_value: redactSensitive(before),
         after_value: redactSensitive(after),
@@ -346,6 +351,7 @@ function redactSensitive(value: unknown): unknown {
 interface LiveSourceRow {
   id: string;
   event_id: string;
+  match_id?: string | null;
   name: string;
   source_kind: "manual" | "obs";
   usage_type: "live" | "highlight" | "prerecorded";
@@ -380,6 +386,7 @@ function liveSourceFromRow(row: LiveSourceRow): StoredVideoSource {
   return {
     id: row.id,
     matchId: row.event_id,
+    catalogMatchId: row.match_id ?? undefined,
     title: row.name,
     sourceKind: row.source_kind as "manual" | "obs",
     usageType: row.usage_type as "live" | "highlight" | "prerecorded",
@@ -427,6 +434,7 @@ function liveSourceToRow(source: StoredVideoSource) {
   return {
     id: source.id,
     event_id: source.matchId,
+    match_id: source.catalogMatchId || null,
     name: source.title,
     source_kind: source.sourceKind || "manual",
     usage_type: source.usageType || (source.purpose === "highlight" ? "highlight" : "live"),
@@ -564,6 +572,7 @@ function sanitizeManagedSource(source: StoredVideoSource) {
     streamKeyIv: _streamKeyIv,
     idempotencyKey: _idempotencyKey,
     idempotencyFingerprint: _idempotencyFingerprint,
+    catalogMatchId: _catalogMatchId,
     ...safe
   } = source;
   const hasStreamKey = Boolean(source.streamKeyCiphertext || source.obs?.streamKey || source.provider === "cloudflare_stream");
@@ -1127,6 +1136,17 @@ const server = createServer(async (request, response) => {
     const eventMatch = url.pathname.match(/^\/api\/sports\/events\/([^/]+)$/);
     if (request.method === "GET" && eventMatch) return json(response, 200, { provider: sportsProvider.name, events: [await sportsProvider.eventById(eventMatch[1])].filter(Boolean) });
 
+    if (request.method === "POST" && url.pathname === "/api/admin/local-matches") {
+      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      if (!sportsCatalog) return json(response, 503, { error: "El catálogo deportivo requiere Supabase" });
+      if (!allowSensitiveAction(request, "create_local_match", 20, 60_000)) return json(response, 429, { error: "Demasiadas solicitudes" });
+      const body = localMatchInputSchema.parse(await readBody(request));
+      const event = await sportsCatalog.createLocalMatch(body);
+      const internalId = await sportsCatalog.findMatchUuid(event.id) ?? event.id;
+      await logAudit(request, "create_local_match", internalId, "success", null, event, "matches");
+      return json(response, 201, { event });
+    }
+
     if (request.method === "GET" && url.pathname === "/api/video-sources") {
       if (canUseAdminSupabase()) {
         const { data, error } = await getAdminSupabaseClient()
@@ -1479,9 +1499,12 @@ const server = createServer(async (request, response) => {
       const fingerprint = createHash("sha256").update(JSON.stringify(body)).digest("hex");
       const id = crypto.randomUUID();
       const isObs = body.sourceKind === "obs";
+      const catalogMatchId = sportsCatalog ? await sportsCatalog.findMatchUuid(body.matchId) : undefined;
+      if (body.matchId.startsWith("local-") && !catalogMatchId) return json(response, 400, { error: "El partido local no existe" });
       const newSource: StoredVideoSource = {
         id,
         matchId: body.matchId,
+        catalogMatchId,
         title: body.title,
         sourceKind: isObs ? "obs" : "manual",
         usageType: body.usageType,
@@ -1698,7 +1721,12 @@ const server = createServer(async (request, response) => {
       const before = { ...currentSource };
 
       if (body.title !== undefined) currentSource.title = body.title.trim();
-      if (body.matchId !== undefined) currentSource.matchId = body.matchId;
+      if (body.matchId !== undefined) {
+        const catalogMatchId = sportsCatalog ? await sportsCatalog.findMatchUuid(body.matchId) : undefined;
+        if (body.matchId.startsWith("local-") && !catalogMatchId) return json(response, 400, { error: "El partido local no existe" });
+        currentSource.matchId = body.matchId;
+        currentSource.catalogMatchId = catalogMatchId;
+      }
       if (body.isPrimary !== undefined) currentSource.isPrimary = body.isPrimary === true;
       if (body.lowLatencyEnabled !== undefined) currentSource.lowLatencyEnabled = body.lowLatencyEnabled === true;
       if (body.recordingEnabled !== undefined) currentSource.recordingEnabled = body.recordingEnabled === true;

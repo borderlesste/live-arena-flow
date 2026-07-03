@@ -32,7 +32,9 @@ import {
   type CreateButtonState,
 } from "@/components/admin/StreamAdminComponents";
 import { DeleteSourceDialog, RotateStreamKeyDialog } from "@/components/admin/StreamDialogs";
+import { LocalMatchDialog } from "@/components/admin/LocalMatchDialog";
 import type { ObsIngestMode, StreamCredentials } from "@/schemas/live-source.schema";
+import type { NormalizedSportsEvent } from "@/schemas/sports-event.schema";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -135,6 +137,7 @@ const AdminPage = () => {
     auth.profile?.role === "super_admin" ||
     auth.profile?.role === "admin" ||
     auth.profile?.role === "stream_operator";
+  const canCreateLocalMatch = auth.profile?.role === "super_admin" || auth.profile?.role === "admin";
 
   // ── Load sources ──────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -450,6 +453,15 @@ const AdminPage = () => {
     toast.success("Listado de partidos actualizado");
   }
 
+  async function handleLocalMatchCreated(event: NormalizedSportsEvent) {
+    const date = new Date(event.startsAt);
+    const localDateKey = new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+    setEventDate(localDateKey);
+    setMatchId(event.id);
+    await queryClient.invalidateQueries({ queryKey: ["sportsdb"] });
+    toast.success("Partido local creado. Ya puedes asociarle una fuente OBS.");
+  }
+
   // ── OBS toggle: force "live" usage and clear playbackUrl field ────────────
   const handleObsEnabledChange = (val: boolean) => {
     setObsEnabled(val);
@@ -505,15 +517,18 @@ const AdminPage = () => {
             Asocia señales en vivo, emisiones OBS y vídeos a partidos deportivos.
           </p>
         </div>
-        <Button
-          variant="outline"
-          className="border-border/60 hover:bg-surface-2 gap-1.5"
-          onClick={() => void refreshEvents()}
-          aria-label="Actualizar lista de partidos"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          Actualizar partidos
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreateLocalMatch ? <LocalMatchDialog token={token} onCreated={handleLocalMatchCreated} /> : null}
+          <Button
+            variant="outline"
+            className="border-border/60 hover:bg-surface-2 gap-1.5"
+            onClick={() => void refreshEvents()}
+            aria-label="Actualizar lista de partidos"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            Actualizar partidos
+          </Button>
+        </div>
       </header>
 
       {/* Error banner */}

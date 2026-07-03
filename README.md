@@ -14,7 +14,7 @@ Frontend: `http://localhost:8080`
 
 Backend: `http://127.0.0.1:8787/api/health`
 
-Los datos deportivos se consumen exclusivamente desde SportSRC V2 a través del backend. La licencia `SPORTSRC_API_KEY` nunca se incluye en el bundle del navegador.
+El backend sincroniza SportSRC V2 en el catálogo deportivo de Supabase y combina esos eventos con partidos locales creados desde administración. La licencia `SPORTSRC_API_KEY` nunca se incluye en el bundle del navegador.
 
 ## Persistencia
 
@@ -48,6 +48,7 @@ Rutas públicas principales:
 
 Las escrituras administrativas usan `Authorization: Bearer <ADMIN_API_TOKEN>`:
 
+- `POST /api/admin/local-matches`
 - `GET|PUT /api/admin/video-sources`
 - `DELETE /api/admin/video-sources/:id`
 - `PUT|DELETE /api/admin/sponsors/:id`

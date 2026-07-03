@@ -14,7 +14,7 @@ Realtime: Supabase Realtime for chat and presence. Realtime publication migratio
 
 Storage: No Supabase Storage bucket or Cloudflare R2 integration is implemented in this checkout.
 
-API deportiva: SportSRC V2 is the only provider. The backend normalizes its grouped match responses and authenticates with `X-API-KEY`.
+API deportiva: SportSRC V2 remains the external provider. The backend normalizes and synchronizes its football events into the Supabase sports catalog, which also accepts local matches created by administrators. Public IDs remain stable so existing routes, favorites and live sources continue working.
 
 Hosting frontend: Vercel-compatible Next.js build. No `vercel.json` is present.
 
@@ -41,7 +41,8 @@ Streaming: Admin-managed video sources and OBS ingest metadata. Public responses
 | Render | Parcial | Si | No verificable localmente | Probable backend | Persistent Node API |
 | Cloudflare | Parcial | Si | No | Futuro/manual | DNS/WAF/CDN, not committed |
 | Supabase | Si | Si | Si cuando env existe | Si | Auth, PostgreSQL, RLS, Realtime |
-| SportSRC V2 | Si | Si | Si con licencia | Si | Datos, resultados y estados en vivo |
+| SportSRC V2 | Si | Si | Si con licencia | Si | Proveedor externo sincronizado al catálogo |
+| Catálogo deportivo Supabase | Si | Si | Si con service role | Si | Fuente canónica para eventos SportSRC y locales |
 
 ## Main Risks
 

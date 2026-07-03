@@ -71,6 +71,18 @@ describe("Supabase migrations", () => {
     await expect(
       db.query("insert into public.news (title, category, excerpt, image) values ($1, $2, $3, $4)", ["Ataque", "Otro", "No permitido", "data:image/svg+xml;base64,PHN2Zz4="]),
     ).rejects.toThrow();
+    const catalogSchema = await db.query<{ has_match_id: boolean; has_external_id_index: boolean }>(`
+      select
+        exists (
+          select 1 from information_schema.columns
+          where table_schema = 'public' and table_name = 'live_sources' and column_name = 'match_id'
+        ) as has_match_id,
+        exists (
+          select 1 from pg_indexes
+          where schemaname = 'public' and indexname = 'matches_external_id_active_idx'
+        ) as has_external_id_index
+    `);
+    expect(catalogSchema.rows[0]).toEqual({ has_match_id: true, has_external_id_index: true });
     await db.close();
   }, 20_000);
 

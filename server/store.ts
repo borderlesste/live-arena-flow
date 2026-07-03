@@ -9,6 +9,8 @@ export type StoredSponsor = Sponsor & Partial<ManagedSponsor>;
 export interface StoredVideoSource {
   id: string;
   matchId: string;
+  /** Internal Supabase match UUID; public/provider matchId remains stable. */
+  catalogMatchId?: string;
   createdAt: string;
   type: StreamType;
   url?: string;
