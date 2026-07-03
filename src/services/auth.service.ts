@@ -24,11 +24,21 @@ export interface UserProfile {
 
 interface AuthResponse { token: string; user: UserProfile }
 
+export interface RegistrationResult {
+  confirmationRequired: boolean;
+  email: string;
+}
+
 const defaultPreferences: UserPreferences = {
   matchReminders: false,
 };
 
 export const getSessionToken = () => localStorage.getItem(TOKEN_KEY);
+
+function authRedirect(path: string): string {
+  const base = publicEnv.NEXT_PUBLIC_APP_URL ?? window.location.origin;
+  return new URL(path, base.endsWith("/") ? base : `${base}/`).toString();
+}
 
 async function ensureProfileExists(token: string): Promise<void> {
   const response = await fetch(`${API_BASE}/auth/ensure-profile`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
@@ -95,29 +105,43 @@ async function supabaseProfile(): Promise<UserProfile> {
 export async function login(email: string, password: string): Promise<AuthResponse> {
   if (!isSupabaseConfigured && legacyAuthAvailable) return legacyAuthenticate("login", { email, password });
   const { data, error } = await (await getSupabaseClient()).auth.signInWithPassword({ email, password });
+  if (error?.code === "email_not_confirmed") throw new Error("Debes verificar tu correo antes de iniciar sesión");
   if (error || !data.session) throw new Error(error?.message ?? "No se pudo iniciar sesión");
   localStorage.setItem(TOKEN_KEY, data.session.access_token);
   return { token: data.session.access_token, user: await supabaseProfile() };
 }
 
-export async function register(displayName: string, email: string, password: string): Promise<AuthResponse> {
-  if (!isSupabaseConfigured && legacyAuthAvailable) return legacyAuthenticate("register", { displayName, email, password });
+export async function register(displayName: string, email: string, password: string): Promise<RegistrationResult> {
+  if (!isSupabaseConfigured && legacyAuthAvailable) {
+    const auth = await legacyAuthenticate("register", { displayName, email, password });
+    return { confirmationRequired: false, email: auth.user.email };
+  }
   const { data, error } = await (await getSupabaseClient()).auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName }, emailRedirectTo: `${window.location.origin}/profile` },
+    options: { data: { display_name: displayName }, emailRedirectTo: authRedirect("/auth/confirm") },
   });
   if (error || !data.user) throw new Error(error?.message ?? "No se pudo crear la cuenta");
-  if (!data.session) throw new Error("Revisa tu correo para confirmar la cuenta antes de iniciar sesión");
+  if (!data.session) return { confirmationRequired: true, email };
   localStorage.setItem(TOKEN_KEY, data.session.access_token);
-  return { token: data.session.access_token, user: await supabaseProfile() };
+  return { confirmationRequired: false, email: data.user.email ?? email };
+}
+
+export async function resendSignupConfirmation(email: string): Promise<void> {
+  if (!isSupabaseConfigured) throw new Error("La verificación requiere configurar Supabase");
+  const { error } = await (await getSupabaseClient()).auth.resend({
+    type: "signup",
+    email,
+    options: { emailRedirectTo: authRedirect("/auth/confirm") },
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function loginWithGoogle(): Promise<void> {
   if (!isSupabaseConfigured) throw new Error("Google requiere configurar Supabase");
   const { error } = await (await getSupabaseClient()).auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${window.location.origin}/profile` },
+    options: { redirectTo: authRedirect("/profile") },
   });
   if (error) throw new Error(error.message);
 }
@@ -125,7 +149,7 @@ export async function loginWithGoogle(): Promise<void> {
 export async function requestPasswordReset(email: string): Promise<void> {
   if (!isSupabaseConfigured) throw new Error("La recuperación requiere configurar Supabase");
   const { error } = await (await getSupabaseClient()).auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/profile?recovery=1`,
+    redirectTo: authRedirect("/auth/update-password"),
   });
   if (error) throw new Error(error.message);
 }
@@ -134,6 +158,15 @@ export async function updatePassword(password: string): Promise<void> {
   if (!isSupabaseConfigured) throw new Error("El cambio de contraseña requiere configurar Supabase");
   const { error } = await (await getSupabaseClient()).auth.updateUser({ password });
   if (error) throw new Error(error.message);
+  const { error: signOutError } = await (await getSupabaseClient()).auth.signOut({ scope: "global" });
+  if (signOutError) throw new Error(signOutError.message);
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+export async function hasVerifiedRecoverySession(): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  const { data, error } = await (await getSupabaseClient()).auth.getUser();
+  return !error && Boolean(data.user);
 }
 
 export async function getProfile(token: string): Promise<UserProfile> {

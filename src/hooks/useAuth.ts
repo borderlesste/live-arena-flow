@@ -8,6 +8,7 @@ import {
   loginWithGoogle,
   logout as logoutRequest,
   register as registerRequest,
+  resendSignupConfirmation,
   requestPasswordReset,
   subscribeToAuth,
   updatePassword,
@@ -42,9 +43,15 @@ export function useAuth() {
   }
 
   async function register(displayName: string, email: string, password: string) {
-    const auth = await registerRequest(displayName, email, password);
-    setToken(auth.token);
-    queryClient.setQueryData(["profile", auth.token], auth.user);
+    const result = await registerRequest(displayName, email, password);
+    if (!result.confirmationRequired) {
+      const nextToken = getSessionToken();
+      if (nextToken) {
+        setToken(nextToken);
+        queryClient.setQueryData(["profile", nextToken], await getProfile(nextToken));
+      }
+    }
+    return result;
   }
 
   async function save(displayName: string, preferences: UserPreferences) {
@@ -66,6 +73,7 @@ export function useAuth() {
     register,
     loginWithGoogle,
     requestPasswordReset,
+    resendSignupConfirmation,
     updatePassword,
     save,
     logout,

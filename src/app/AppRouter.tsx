@@ -1,11 +1,12 @@
-import { Suspense, lazy } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Suspense, lazy, useEffect } from "react";
+import { Route, Routes, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { MatchReminderManager } from "@/components/notifications/MatchReminderManager";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { subscribeToAuth } from "@/services/auth.service";
 
 import HomePage from "@/views/HomePage";
 import NotFound from "@/views/NotFound";
@@ -29,6 +30,21 @@ const CommunityRulesPage = lazy(() => import("@/views/legal/CommunityRulesPage")
 const ContactPage = lazy(() => import("@/views/legal/ContactPage"));
 const BroadcastRightsPage = lazy(() => import("@/views/legal/BroadcastRightsPage"));
 const SponsorsInfoPage = lazy(() => import("@/views/legal/SponsorsInfoPage"));
+const ForgotPasswordPage = lazy(() => import("@/views/ForgotPasswordPage"));
+const VerifyEmailPage = lazy(() => import("@/views/VerifyEmailPage"));
+const AuthConfirmationPage = lazy(() => import("@/views/AuthConfirmationPage"));
+const UpdatePasswordPage = lazy(() => import("@/views/UpdatePasswordPage"));
+
+function AuthEventRouter() {
+  const navigate = useNavigate();
+  useEffect(() => subscribeToAuth((event) => {
+    if (event === "PASSWORD_RECOVERY") navigate("/auth/update-password", { replace: true });
+    if (event === "SIGNED_IN" && /(?:^|[&#])type=(?:signup|email)(?:&|$)/.test(window.location.hash)) {
+      navigate("/auth/confirm", { replace: true });
+    }
+  }), [navigate]);
+  return null;
+}
 
 function PageFallback() {
   return (
@@ -43,6 +59,7 @@ function PageFallback() {
 export function AppRouter() {
   return (
     <div className="flex min-h-dvh flex-col">
+      <AuthEventRouter />
       <MatchReminderManager />
       <Header />
       <main id="contenido" className="flex-1 pb-24 lg:pb-0">
@@ -56,6 +73,10 @@ export function AppRouter() {
             <Route path="/results" element={<ResultsPage />} />
             <Route path="/match/:id" element={<MatchDetailsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/auth/confirm" element={<AuthConfirmationPage />} />
+            <Route path="/auth/update-password" element={<UpdatePasswordPage />} />
             <Route path="/admin" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
             <Route path="/admin/dashboard" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
             <Route path="/admin/streams" element={<AdminLayout><AdminPage /></AdminLayout>} />

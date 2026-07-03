@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Bell, CalendarDays, CheckCircle2, KeyRound, LogIn, LogOut, Mail, ShieldCheck, Trash2, User, UserPlus } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +21,7 @@ import { formatMatchDate } from "@/lib/format";
 const ProfilePage = () => {
   useDocumentMeta({ title: "Perfil", description: "Gestiona tu cuenta y preferencias de Luis Romero Fútbol." });
   const auth = useAuth();
+  const navigate = useNavigate();
   const followedMatches = useFavoriteMatchEvents();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,8 +61,14 @@ const ProfilePage = () => {
     setSubmitting(true);
     setError(null);
     try {
-      if (mode === "register") await auth.register(displayName, email, password);
-      else await auth.login(email, password);
+      if (mode === "register") {
+        const result = await auth.register(displayName, email, password);
+        if (result.confirmationRequired) {
+          setPassword("");
+          navigate("/auth/verify-email", { replace: true, state: { email: result.email } });
+          return;
+        }
+      } else await auth.login(email, password);
       setPassword("");
       toast.success(mode === "register" ? "Cuenta creada" : "Sesión iniciada");
     } catch (cause) {
@@ -99,20 +106,6 @@ const ProfilePage = () => {
     catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo iniciar sesión con Google"); setSubmitting(false); }
   }
 
-  async function recoverPassword() {
-    if (!email) { setError("Escribe tu correo para recuperar la contraseña"); return; }
-    setSubmitting(true);
-    setError(null);
-    try {
-      await auth.requestPasswordReset(email);
-      toast.success("Revisa tu correo para restablecer la contraseña");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo enviar el correo");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (auth.isLoading) {
     return <section className="container mx-auto space-y-4 px-4 py-8 md:px-6"><SkeletonLoader className="h-40 w-full" /><SkeletonLoader className="h-80 w-full" /></section>;
   }
@@ -145,9 +138,10 @@ const ProfilePage = () => {
               <TabsContent value="login"><AuthForm mode="login" email={email} password={password} displayName={displayName} submitting={submitting} error={error} onEmail={setEmail} onPassword={setPassword} onDisplayName={setDisplayName} onSubmit={submitAccess} /></TabsContent>
               <TabsContent value="register"><AuthForm mode="register" email={email} password={password} displayName={displayName} submitting={submitting} error={error} onEmail={setEmail} onPassword={setPassword} onDisplayName={setDisplayName} onSubmit={submitAccess} /></TabsContent>
             </Tabs>
+            <Button asChild variant="link" className="mt-1 w-full"><Link to="/auth/verify-email">¿No recibiste la verificación?</Link></Button>
             <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />o continúa con<span className="h-px flex-1 bg-border" /></div>
             <Button type="button" variant="outline" className="w-full" disabled={submitting} onClick={() => void googleLogin()}>Google</Button>
-            <Button type="button" variant="link" className="mt-2 w-full" disabled={submitting} onClick={() => void recoverPassword()}><KeyRound className="mr-2 h-4 w-4" />Recuperar contraseña</Button>
+            <Button asChild variant="link" className="mt-2 w-full"><Link to="/auth/forgot-password"><KeyRound className="mr-2 h-4 w-4" />Recuperar contraseña</Link></Button>
           </CardContent>
         </Card>
       </section>

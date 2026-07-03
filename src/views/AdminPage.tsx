@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { ErrorState } from "@/components/feedback/States";
 import { getSessionToken } from "@/services/auth.service";
-import { BrandSettingsPanel } from "@/components/admin/BrandSettingsPanel";
 import type { SportsDataBundle } from "@/services/sports-data.mapper";
 import {
   createLiveSource,
@@ -524,9 +523,6 @@ const AdminPage = () => {
           <AlertDescription>{sourcesError}</AlertDescription>
         </Alert>
       )}
-
-      {/* Brand settings panel */}
-      <BrandSettingsPanel token={token} />
 
       {/* ── 3-Column grid ── */}
       <div
