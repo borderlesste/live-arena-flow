@@ -1,4 +1,5 @@
 interface SupabaseKeyEnvironment {
+  [key: string]: string | undefined;
   SUPABASE_PUBLISHABLE_KEY?: string;
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
   VITE_SUPABASE_PUBLISHABLE_KEY?: string;
