@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { formatDayGroup } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,11 +67,30 @@ interface MatchComboboxProps {
   matchError?: string;
 }
 
+function groupMatchesByDay(matches: Match[]) {
+  return matches.reduce<Record<string, Match[]>>((acc, match) => {
+    const date = match.startsAt.slice(0, 10);
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(match);
+    return acc;
+  }, {});
+}
+
 function MatchCombobox({
   matches, selectedMatchId, onMatchChange, eventLabel, matchError,
 }: MatchComboboxProps) {
   const [open, setOpen] = useState(false);
   const selectedLabel = selectedMatchId ? eventLabel(selectedMatchId) : "";
+  const groupedMatches = useMemo(() => {
+    const groups = groupMatchesByDay(matches);
+    return Object.keys(groups)
+      .sort()
+      .map((date) => ({
+        date,
+        heading: formatDayGroup(`${date}T00:00:00Z`),
+        matches: groups[date].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+      }));
+  }, [matches]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -103,24 +123,26 @@ function MatchCombobox({
           <CommandInput placeholder="Buscar por equipo o ID..." />
           <CommandList>
             <CommandEmpty>No se encontraron partidos.</CommandEmpty>
-            <CommandGroup heading="Partidos disponibles">
-              {matches.map((match) => {
-                const label = eventLabel(match.id);
-                return (
-                  <CommandItem
-                    key={match.id}
-                    value={`${label} ${match.id}`}
-                    onSelect={() => {
-                      onMatchChange(match.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <Check className={cn("mr-2", selectedMatchId === match.id ? "opacity-100" : "opacity-0")} />
-                    <span className="whitespace-normal text-left leading-snug">{label}</span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
+            {groupedMatches.map((group) => (
+              <CommandGroup key={group.date} heading={group.heading}>
+                {group.matches.map((match) => {
+                  const label = eventLabel(match.id);
+                  return (
+                    <CommandItem
+                      key={match.id}
+                      value={`${label} ${match.id}`}
+                      onSelect={() => {
+                        onMatchChange(match.id);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={cn("mr-2", selectedMatchId === match.id ? "opacity-100" : "opacity-0")} />
+                      <span className="whitespace-normal text-left leading-snug">{label}</span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>
