@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { BrandSettingsPanel } from "@/components/admin/BrandSettingsPanel";
+import { WebAnalyticsPanel } from "@/components/admin/WebAnalyticsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useSportsWindow } from "@/hooks/useSportsData";
@@ -16,6 +17,7 @@ import { listManagedSponsors } from "@/services/sponsors.service";
 import { listManagedVideoSources, type ManagedVideoSource } from "@/services/video-sources.service";
 import {
   getAdminMetricsOverview,
+  getAdminWebAnalytics,
   listAdminAudit,
   listAdminChatReports,
   listAdminStreamMetrics,
@@ -25,6 +27,8 @@ import {
   type AdminMetricsOverview,
   type AdminStreamMetric,
   type AdminUserRow,
+  type AdminWebAnalytics,
+  type WebAnalyticsPeriod,
 } from "@/services/admin.service";
 
 type AdminSection = "dashboard" | "matches" | "users" | "chat" | "analytics" | "settings" | "audit";
@@ -80,6 +84,10 @@ export default function AdminOperationsPage() {
   const [sponsorCount, setSponsorCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [webAnalytics, setWebAnalytics] = useState<AdminWebAnalytics | null>(null);
+  const [webAnalyticsPeriod, setWebAnalyticsPeriod] = useState<WebAnalyticsPeriod>("week");
+  const [webAnalyticsLoading, setWebAnalyticsLoading] = useState(false);
+  const [webAnalyticsError, setWebAnalyticsError] = useState<string | null>(null);
 
   const range = useMemo(() => dateRange(7), []);
 
@@ -113,6 +121,25 @@ export default function AdminOperationsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    if (section !== "analytics" || !token || !canAdmin) return;
+    let cancelled = false;
+    setWebAnalyticsLoading(true);
+    void getAdminWebAnalytics(token, webAnalyticsPeriod)
+      .then((result) => {
+        if (cancelled) return;
+        setWebAnalytics(result);
+        setWebAnalyticsError(null);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setWebAnalyticsError(cause instanceof Error ? cause.message : "No se pudo cargar la analítica web");
+      })
+      .finally(() => {
+        if (!cancelled) setWebAnalyticsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [canAdmin, section, token, webAnalyticsPeriod]);
+
   if (auth.isLoading) return <AdminSkeleton />;
   if (!auth.authenticated) return <Guard title="Inicia sesión" description="Debes autenticarte para acceder al panel administrativo." />;
   if (!canAdmin) return <Guard title="Acceso restringido" description="Tu cuenta no tiene permisos administrativos." />;
@@ -133,7 +160,7 @@ export default function AdminOperationsPage() {
       {section === "matches" ? <Matches bundle={bundle} sources={sources} loading={sportsLoading} error={sportsError} refresh={() => void refetch()} /> : null}
       {section === "users" ? <UsersTable users={users} /> : null}
       {section === "chat" ? <ChatReports reports={reports} /> : null}
-      {section === "analytics" ? <Analytics metrics={metrics} streamMetrics={streamMetrics} /> : null}
+      {section === "analytics" ? <Analytics metrics={metrics} streamMetrics={streamMetrics} webAnalytics={webAnalytics} webAnalyticsPeriod={webAnalyticsPeriod} webAnalyticsLoading={webAnalyticsLoading} webAnalyticsError={webAnalyticsError} onWebAnalyticsPeriodChange={setWebAnalyticsPeriod} /> : null}
       {section === "settings" ? <BrandSettingsPanel token={token} /> : null}
       {section === "audit" ? <AuditTable rows={audit} /> : null}
     </section>
@@ -198,9 +225,22 @@ function ChatReports({ reports }: { reports: AdminChatReport[] }) {
   return <Card className="surface-card"><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Mensaje</TableHead><TableHead>Reportado por</TableHead><TableHead>Razón</TableHead><TableHead>Fecha</TableHead></TableRow></TableHeader><TableBody>{reports.map((report) => <TableRow key={report.id}><TableCell className="max-w-md truncate">{report.message?.body ?? "Mensaje eliminado"}</TableCell><TableCell>{report.reporterName}</TableCell><TableCell>{report.reason}</TableCell><TableCell>{formatDate(report.created_at)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>;
 }
 
-function Analytics({ metrics, streamMetrics }: { metrics: AdminMetricsOverview; streamMetrics: AdminStreamMetric[] }) {
+function Analytics({ metrics, streamMetrics, webAnalytics, webAnalyticsPeriod, webAnalyticsLoading, webAnalyticsError, onWebAnalyticsPeriodChange }: {
+  metrics: AdminMetricsOverview;
+  streamMetrics: AdminStreamMetric[];
+  webAnalytics: AdminWebAnalytics | null;
+  webAnalyticsPeriod: WebAnalyticsPeriod;
+  webAnalyticsLoading: boolean;
+  webAnalyticsError: string | null;
+  onWebAnalyticsPeriodChange: (period: WebAnalyticsPeriod) => void;
+}) {
   return (
     <div className="space-y-6">
+      <WebAnalyticsPanel data={webAnalytics} period={webAnalyticsPeriod} loading={webAnalyticsLoading} error={webAnalyticsError} onPeriodChange={onWebAnalyticsPeriodChange} />
+      <div className="border-t border-border/70 pt-6">
+        <h2 className="font-display text-xl font-semibold">Actividad de la plataforma</h2>
+        <p className="text-sm text-muted-foreground">Eventos internos, patrocinadores y reproducción durante los últimos 7 días.</p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Actividad" value={metrics.total_activity_events} />
         <MetricCard label="Únicos" value={metrics.unique_active_ids} />

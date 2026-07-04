@@ -16,7 +16,7 @@ Storage: No Supabase Storage bucket or Cloudflare R2 integration is implemented 
 
 API deportiva: SportSRC V2 remains the external provider. The backend normalizes and synchronizes its football events into the Supabase sports catalog, which also accepts local matches created by administrators. Public IDs remain stable so existing routes, favorites and live sources continue working.
 
-Hosting frontend: Vercel-compatible Next.js build. No `vercel.json` is present.
+Hosting frontend: Vercel-compatible Next.js build. `vercel.json` schedules the daily Web Analytics synchronization.
 
 Hosting backend: Render-compatible persistent Node service by convention. No `render.yaml` is present.
 
@@ -26,11 +26,13 @@ Repositorio y CI/CD: GitHub remote exists and `.github/workflows/ci.yml` now val
 
 Workers: None committed.
 
-Cron jobs: None committed.
+Cron jobs: Vercel invokes `/api/cron/analytics` once per day. The route authenticates with `CRON_SECRET` and forwards the synchronization to the persistent backend.
 
 Webhooks: None committed.
 
 Streaming: Admin-managed video sources and OBS ingest metadata. Public responses strip OBS secrets; stream keys are encrypted when `STREAM_SECRET_KEY` is configured.
+
+Web analytics: Cloudflare's browser beacon records privacy-preserving visits and page views. The backend reads daily aggregates through the Cloudflare GraphQL Analytics API and stores them in `web_analytics_daily` so the admin panel can retain history beyond the provider window. No IP address, cookie, user agent or personal profile is persisted by this module.
 
 ## Service Matrix
 
@@ -39,7 +41,7 @@ Streaming: Admin-managed video sources and OBS ingest metadata. Public responses
 | GitHub | Si | Si | Si | Si | Source control and CI |
 | Vercel | Parcial | Si | No verificable localmente | Probable frontend | Next.js frontend and API rewrites |
 | Render | Parcial | Si | No verificable localmente | Probable backend | Persistent Node API |
-| Cloudflare | Parcial | Si | No | Futuro/manual | DNS/WAF/CDN, not committed |
+| Cloudflare | Parcial | Si | Si al configurar tokens | Web Analytics y Stream | Beacon de audiencia, GraphQL Analytics y video streaming |
 | Supabase | Si | Si | Si cuando env existe | Si | Auth, PostgreSQL, RLS, Realtime |
 | SportSRC V2 | Si | Si | Si con licencia | Si | Proveedor externo sincronizado al catálogo |
 | Catálogo deportivo Supabase | Si | Si | Si con service role | Si | Fuente canónica para eventos SportSRC y locales |
@@ -49,4 +51,4 @@ Streaming: Admin-managed video sources and OBS ingest metadata. Public responses
 - `server/index.ts` remains too large and mixes routing, validation, persistence, Supabase access and response shaping.
 - Some mutable app data still lives in `server/data/app.json`, which is not safe for multi-replica production.
 - No committed Render/Vercel deployment manifests exist, so deployment settings must be verified in dashboards.
-- Cloudflare is only represented by environment variables; rules are not codified.
+- Cloudflare Web Analytics requires creating the site token and a least-privilege Account Analytics read token in the dashboard.

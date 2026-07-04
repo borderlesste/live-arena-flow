@@ -14,6 +14,7 @@ const protectedTables = [
   "live_sources",
   "live_source_webhook_events",
   "live_source_provider_cleanup_jobs",
+  "web_analytics_daily",
 ];
 
 async function readMigrationSet() {
@@ -83,6 +84,12 @@ describe("Supabase migrations", () => {
         ) as has_external_id_index
     `);
     expect(catalogSchema.rows[0]).toEqual({ has_match_id: true, has_external_id_index: true });
+    const webAnalytics = await db.query<{ rls_enabled: boolean; authenticated_select: boolean }>(`
+      select
+        (select relrowsecurity from pg_class where oid = 'public.web_analytics_daily'::regclass) as rls_enabled,
+        has_table_privilege('authenticated', 'public.web_analytics_daily', 'SELECT') as authenticated_select
+    `);
+    expect(webAnalytics.rows[0]).toEqual({ rls_enabled: true, authenticated_select: false });
     await db.close();
   }, 20_000);
 

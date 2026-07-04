@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import Script from "next/script";
 import { publicEnv } from "@/config/env";
 import "../index.css";
 
@@ -43,9 +44,20 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  const analyticsToken = publicEnv.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN;
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        {children}
+        {analyticsToken ? (
+          <Script
+            id="cloudflare-web-analytics"
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            strategy="afterInteractive"
+            data-cf-beacon={JSON.stringify({ token: analyticsToken, spa: true })}
+          />
+        ) : null}
+      </body>
     </html>
   );
 }

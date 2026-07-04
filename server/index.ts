@@ -28,6 +28,15 @@ import {
   type LiveSourceStatus,
 } from "../src/schemas/live-source.schema.js";
 import { localMatchInputSchema } from "../src/schemas/local-match.schema.js";
+import {
+  cloudflareBackfillStart,
+  getCloudflareWebAnalyticsConfig,
+  periodRange,
+  summarizeWebAnalytics,
+  syncCloudflareWebAnalytics,
+  type StoredWebAnalyticsRow,
+  type WebAnalyticsPeriod,
+} from "./modules/analytics/web-analytics.js";
 
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -38,6 +47,9 @@ const LEGACY_AUTH_ENABLED = process.env.NODE_ENV !== "production" && process.env
 const chatRateLimit = new Map<string, number>();
 const sensitiveActionRateLimit = new Map<string, { count: number; resetAt: number }>();
 const scryptAsync = promisify(scrypt);
+const webAnalyticsPeriodSchema = z.enum(["day", "week", "month", "year"]);
+const webAnalyticsSyncTimes = new Map<string, number>();
+const webAnalyticsSyncPromises = new Map<string, Promise<{ synced: number }>>();
 const sportsCatalog = canUseAdminSupabase() ? new SupabaseSportsCatalog(getAdminSupabaseClient()) : undefined;
 const sportsProvider = new CatalogBackedSportsProvider(createSportsProvider(), sportsCatalog);
 const VERSION = process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "local";
@@ -657,6 +669,42 @@ function managedSponsorsToPublic(sponsors: ManagedSponsor[]) {
       color: sponsorColor(sponsor.id),
       tier: sponsor.type,
     }));
+}
+
+function bearerSecretMatches(request: IncomingMessage, expected: string | undefined): boolean {
+  if (!expected) return false;
+  const received = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+  const expectedDigest = createHash("sha256").update(expected).digest();
+  const receivedDigest = createHash("sha256").update(received).digest();
+  return timingSafeEqual(expectedDigest, receivedDigest);
+}
+
+async function maybeSyncWebAnalytics(start: string, end: string, force = false): Promise<{ synced: number }> {
+  const config = getCloudflareWebAnalyticsConfig();
+  if (!config) throw new Error("CLOUDFLARE_ANALYTICS_NOT_CONFIGURED");
+  const cacheKey = `${start}:${end}`;
+  if (!force && Date.now() - (webAnalyticsSyncTimes.get(cacheKey) ?? 0) < 10 * 60_000) return { synced: 0 };
+  let syncPromise = webAnalyticsSyncPromises.get(cacheKey);
+  if (!syncPromise) {
+    syncPromise = syncCloudflareWebAnalytics(getAdminSupabaseClient(), config, start, end)
+      .then((result) => {
+        webAnalyticsSyncTimes.set(cacheKey, Date.now());
+        return result;
+      })
+      .finally(() => { webAnalyticsSyncPromises.delete(cacheKey); });
+    webAnalyticsSyncPromises.set(cacheKey, syncPromise);
+  }
+  return syncPromise;
+}
+
+async function webAnalyticsRows(start: string, end: string, siteTag?: string): Promise<StoredWebAnalyticsRow[]> {
+  let query = getAdminSupabaseClient().from("web_analytics_daily")
+    .select("day,hostname,visits,page_views,sample_interval,synced_at")
+    .gte("day", start).lte("day", end).order("day", { ascending: true });
+  if (siteTag) query = query.eq("site_tag", siteTag);
+  const result = await query;
+  if (result.error) throw result.error;
+  return (result.data ?? []) as StoredWebAnalyticsRow[];
 }
 
 function publicSponsors(sponsors: Awaited<ReturnType<typeof readStore>>["sponsors"]) {
@@ -2008,6 +2056,61 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/admin/audit") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       return json(response, 200, await adminAuditPayload());
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/internal/analytics/sync") {
+      if (!process.env.CRON_SECRET?.trim()) return json(response, 503, { error: "Sincronización no configurada" });
+      if (!bearerSecretMatches(request, process.env.CRON_SECRET.trim())) return json(response, 401, { error: "No autorizado" });
+      const today = new Date().toISOString().slice(0, 10);
+      const start = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+      try {
+        const result = await maybeSyncWebAnalytics(start, today, true);
+        return json(response, 200, { ok: true, ...result, start, end: today });
+      } catch (error) {
+        const code = error instanceof Error && error.message.startsWith("CLOUDFLARE_ANALYTICS_")
+          ? error.message
+          : "ANALYTICS_SYNC_FAILED";
+        console.warn("[web-analytics] scheduled sync failed", { code });
+        return json(response, 503, { error: "No se pudo sincronizar la analítica", code });
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/admin/web-analytics") {
+      if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
+      const parsedPeriod = webAnalyticsPeriodSchema.safeParse(url.searchParams.get("period") ?? "week");
+      if (!parsedPeriod.success) return json(response, 400, { error: "Período no válido" });
+      const period = parsedPeriod.data as WebAnalyticsPeriod;
+      const range = periodRange(period);
+      const config = getCloudflareWebAnalyticsConfig();
+      let syncStatus: "ready" | "not_configured" | "error" = config ? "ready" : "not_configured";
+      let syncErrorCode: string | undefined;
+      if (config) {
+        try {
+          await maybeSyncWebAnalytics(cloudflareBackfillStart(range.start), range.end);
+        } catch (error) {
+          syncStatus = "error";
+          syncErrorCode = error instanceof Error && error.message.startsWith("CLOUDFLARE_ANALYTICS_")
+            ? error.message
+            : "ANALYTICS_SYNC_FAILED";
+          console.warn("[web-analytics] admin refresh failed; using persisted data", { code: syncErrorCode });
+        }
+      }
+      try {
+        const [currentRows, previousRows] = await Promise.all([
+          webAnalyticsRows(range.start, range.end, config?.siteTag),
+          webAnalyticsRows(range.previousStart, range.previousEnd, config?.siteTag),
+        ]);
+        return json(response, 200, {
+          ...summarizeWebAnalytics(period, range, currentRows, previousRows),
+          source: "cloudflare",
+          configured: Boolean(config),
+          syncStatus,
+          syncErrorCode,
+        });
+      } catch (error) {
+        console.warn("[web-analytics] persisted metrics unavailable", { code: "ANALYTICS_STORAGE_UNAVAILABLE" });
+        return json(response, 503, { error: "La analítica web todavía no está disponible", code: "ANALYTICS_STORAGE_UNAVAILABLE" });
+      }
     }
 
     if (request.method === "GET" && url.pathname === "/api/admin/metrics/overview") {

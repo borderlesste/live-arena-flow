@@ -30,6 +30,23 @@ export interface AdminStreamMetric {
   avg_viewers: number;
 }
 
+export type WebAnalyticsPeriod = "day" | "week" | "month" | "year";
+
+export interface AdminWebAnalytics {
+  period: WebAnalyticsPeriod;
+  start: string;
+  end: string;
+  totals: { visits: number; pageViews: number; pagesPerVisit: number };
+  previous: { visits: number; pageViews: number };
+  changePercent: number | null;
+  series: Array<{ date: string; visits: number; pageViews: number }>;
+  lastSyncedAt: string | null;
+  source: "cloudflare";
+  configured: boolean;
+  syncStatus: "ready" | "not_configured" | "error";
+  syncErrorCode?: string;
+}
+
 export interface AdminAuditLog {
   id: string;
   actor_id: string | null;
@@ -84,4 +101,8 @@ export function getAdminMetricsOverview(token: string, start: string, end: strin
 
 export function listAdminStreamMetrics(token: string, start: string, end: string) {
   return adminJson<AdminStreamMetric[]>(token, `/admin/metrics/streams?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+}
+
+export function getAdminWebAnalytics(token: string, period: WebAnalyticsPeriod) {
+  return adminJson<AdminWebAnalytics>(token, `/admin/web-analytics?period=${period}`);
 }

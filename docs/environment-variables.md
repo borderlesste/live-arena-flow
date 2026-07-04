@@ -10,12 +10,14 @@ This document lists names and responsibilities only. Do not commit real values.
 | `NEXT_PUBLIC_API_BASE_URL` | Recommended | Defaults to `/api`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Recommended | Browser-safe project URL. If omitted, Next retrieves it from the backend through `API_INTERNAL_URL`. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Recommended | Browser-safe publishable key. If omitted, Next retrieves it from the backend. Accepts modern `sb_publishable_…` and valid public `anon` JWTs. |
+| `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` | Web Analytics | Public site token used by the Cloudflare beacon. It is not an API credential. |
 
 ## Vercel Server Runtime
 
 | Variable | Required | Notes |
 | --- | ---: | --- |
 | `API_INTERNAL_URL` | Production | Public HTTPS origin of the persistent backend, without the `/api` suffix. Never use `localhost` or `127.0.0.1` in Vercel. |
+| `CRON_SECRET` | Web Analytics | Random secret used by Vercel Cron and the backend. Configure the same value in both services. Never expose it through `NEXT_PUBLIC_*`. |
 
 ## Backend / Render
 
@@ -35,6 +37,10 @@ This document lists names and responsibilities only. Do not commit real values.
 | `CLOUDFLARE_STREAM_ALLOWED_ORIGINS` | Cloudflare playback | Comma-separated hostnames allowed to load the stream; do not include schemes or paths. |
 | `CLOUDFLARE_STREAM_API_TIMEOUT_MS` | Cloudflare | Backend request timeout, from 1000 to 60000 ms. |
 | `CLOUDFLARE_STREAM_WEBHOOK_SECRET` | Cloudflare production | At least 32 characters; rotate the previously exposed value. |
+| `CLOUDFLARE_ANALYTICS_API_TOKEN` | Web Analytics | Dedicated server-only token with `Account Analytics: Read`. Do not reuse the Stream token. |
+| `CLOUDFLARE_WEB_ANALYTICS_SITE_TOKEN` | Web Analytics | Server-side alias of the public site token; optional when the public token is also present in the backend environment. |
+| `CLOUDFLARE_ANALYTICS_API_TIMEOUT_MS` | Web Analytics | Cloudflare GraphQL timeout. Defaults to 15000 ms. |
+| `CRON_SECRET` | Web Analytics | Must match Vercel's value; authorizes only the internal analytics synchronization route. |
 | `RESTREAM_ACCESS_TOKEN` | Restream API mode | Server-only OAuth access token with `channels.read` and `stream.read`. |
 | `RESTREAM_INGEST_URL` | Restream static mode | RTMP/RTMPS/SRT ingest URL; requires `RESTREAM_STREAM_KEY`. |
 | `RESTREAM_STREAM_KEY` | Restream static mode | Server-only publishing key; never expose through `NEXT_PUBLIC_*`. |
@@ -62,3 +68,4 @@ This document lists names and responsibilities only. Do not commit real values.
 - Cloudflare production must configure a webhook secret with at least 32 characters.
 - Cloudflare HLS playback requires `CLOUDFLARE_STREAM_RECORDING_MODE=automatic`.
 - Frontend variables must never contain service-role, provider, ingest, or admin secrets.
+- The Cloudflare analytics API token must be separate from the public site token and the Stream write token.
