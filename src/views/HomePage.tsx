@@ -48,8 +48,13 @@ const HomePage = () => {
   const mainSponsors = allSponsors.filter((s) => s.tier === "main" || s.tier === "official");
   const partnerSponsors = allSponsors.filter((s) => s.tier === "partner");
 
-  const [activeId, setActiveId] = useState(live[0]?.id);
   const featured = [...live, ...upcoming, ...finished];
+
+  // Prefer the match that contains a source marked as primary. If none exists,
+  // fallback to the first live match.
+  const primaryMatchId = useMemo(() => featured.find((m) => (m.streams || []).some((s) => s.isPrimary))?.id, [featured]);
+
+  const [activeId, setActiveId] = useState<string | undefined>(primaryMatchId ?? live[0]?.id);
   const activeMatch = featured.find((match) => match.id === activeId) ?? featured[0];
   const homeTeam = activeMatch ? getTeam(activeMatch.homeTeamId) : null;
   const awayTeam = activeMatch ? getTeam(activeMatch.awayTeamId) : null;
@@ -72,6 +77,12 @@ const HomePage = () => {
     // Move focus to active title (without scrolling) when stream changes
     titleRef.current?.focus({ preventScroll: true });
   }, [activeId]);
+
+  // Always switch the hero to the primary match if one is present.
+  useEffect(() => {
+    if (!primaryMatchId) return;
+    if (activeId !== primaryMatchId) setActiveId(primaryMatchId);
+  }, [primaryMatchId, activeId]);
 
   if (isLoading || isContentLoading) return <section className="container mx-auto px-4 py-8 md:px-6"><SkeletonLoader className="h-[520px] w-full" /></section>;
 
