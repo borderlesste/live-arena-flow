@@ -13,6 +13,10 @@ const publicEnvSchema = z.object({
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
     z.string().optional(),
   ),
+  NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().regex(/^[a-f0-9]{32}$/i, "Token público de Cloudflare Web Analytics inválido").optional(),
+  ),
 });
 
 export const publicEnv = publicEnvSchema.parse({
@@ -20,6 +24,7 @@ export const publicEnv = publicEnvSchema.parse({
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || "/api",
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN: process.env.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN,
 });
 
 export const isPublicSupabaseConfigured = Boolean(publicEnv.NEXT_PUBLIC_SUPABASE_URL && publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);

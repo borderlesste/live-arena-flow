@@ -30,7 +30,7 @@ export function EmbedPlayer({ embedUrl, title, requiresConsent, className }: Emb
 
   if (!accepted) {
     return (
-      <div className={className + " grid place-items-center bg-surface-2 px-4 pb-14 pt-14 sm:p-6"}>
+      <div className={className + " grid place-items-center bg-surface-2 px-4 pb-24 pt-14 sm:p-6"}>
         <div data-testid="embed-consent-content" className="max-w-md space-y-2 text-center sm:space-y-4">
           <Shield className="mx-auto hidden h-8 w-8 text-primary sm:block" aria-hidden="true" />
           <div>

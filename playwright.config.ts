@@ -17,7 +17,14 @@ export default defineConfig({
       command: "node node_modules/tsx/dist/cli.mjs server/index.ts",
       port: 18787,
       reuseExistingServer: false,
-      env: { NODE_ENV: "development", API_PORT: "18787", APP_ORIGIN: "http://127.0.0.1:18080", LEGACY_AUTH_ENABLED: "false", ADMIN_API_TOKEN: "qa-admin-token" },
+      env: {
+        NODE_ENV: "development",
+        API_PORT: "18787",
+        APP_ORIGIN: "http://127.0.0.1:18080",
+        LEGACY_AUTH_ENABLED: "false",
+        ADMIN_API_TOKEN: "qa-admin-token",
+        SPORTSRC_API_KEY: "e2e-placeholder",
+      },
     },
     {
       command: "node node_modules/next/dist/bin/next dev -p 18080",
