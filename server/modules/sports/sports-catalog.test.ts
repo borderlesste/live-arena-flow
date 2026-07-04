@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { databaseTimestamp, eventFromRow } from "./sports-catalog.js";
+import { databaseTimestamp, dateRange, eventFromRow } from "./sports-catalog.js";
 
 describe("sports catalog timestamps", () => {
   it("normalizes PostgreSQL timestamptz offsets to the public UTC contract", () => {
@@ -44,5 +44,12 @@ describe("sports catalog timestamps", () => {
 
   it("rejects irrecoverable timestamps explicitly", () => {
     expect(() => databaseTimestamp("not-a-date")).toThrow("SPORTS_CATALOG_INVALID_TIMESTAMP");
+  });
+
+  it("uses the same UTC day boundary as the SportSRC date endpoint", () => {
+    expect(dateRange("2026-07-04")).toEqual({
+      start: "2026-07-04T00:00:00.000Z",
+      end: "2026-07-05T00:00:00.000Z",
+    });
   });
 });

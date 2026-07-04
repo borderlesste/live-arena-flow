@@ -244,7 +244,7 @@ function AuthForm({ mode, email, password, displayName, submitting, error, onEma
   return (
     <form onSubmit={(event) => onSubmit(event, mode)} className="mt-5 space-y-4">
       {mode === "register" ? <Field label="Nombre visible"><Input value={displayName} onChange={(event) => onDisplayName(event.target.value)} autoComplete="name" minLength={2} maxLength={40} required /></Field> : null}
-      <Field label="Correo electrónico"><Input value={email} onChange={(event) => onEmail(event.target.value)} type="email" autoComplete="email" required /></Field>
+      <Field label="Correo electrónico"><Input value={email} onChange={(event) => onEmail(event.target.value)} type="email" autoComplete="email" maxLength={160} required /></Field>
       <Field label="Contraseña"><Input value={password} onChange={(event) => onPassword(event.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={8} maxLength={128} required /><p className="text-xs text-muted-foreground">Mínimo 8 caracteres.</p></Field>
       {error ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm text-destructive">{error}</p> : null}
       <Button type="submit" disabled={submitting} className="w-full">{mode === "login" ? <LogIn className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}{submitting ? "Procesando…" : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}</Button>

@@ -30,18 +30,16 @@ async function connect() {
   if (!isSupabaseConfigured || channel) return;
   const client = await getSupabaseClient();
   const { data } = await client.auth.getSession();
-  if (!data.session) return;
   const deviceId = stableId(localStorage, "arena-live:device-id");
-  const tabId = stableId(sessionStorage, "arena-live:tab-id");
   channel = client.channel("presence:global", { config: { presence: { key: deviceId } } });
   channel.on("presence", { event: "sync" }, () => publish(Object.keys(channel?.presenceState() ?? {}).length));
   channel.subscribe(async (status) => {
-    if (status === "SUBSCRIBED") {
-      await channel?.track({ user_id: data.session.user.id, device_id: deviceId, state: "chatting", online_at: new Date().toISOString() });
-      await heartbeat(deviceId, tabId);
-    }
+    if (status !== "SUBSCRIBED" || !data.session) return;
+    const tabId = stableId(sessionStorage, "arena-live:tab-id");
+    await channel?.track({ state: "chatting", online_at: new Date().toISOString() });
+    await heartbeat(deviceId, tabId);
+    heartbeatTimer = window.setInterval(() => { void heartbeat(deviceId, tabId); }, 30_000);
   });
-  heartbeatTimer = window.setInterval(() => { void heartbeat(deviceId, tabId); }, 30_000);
 }
 
 export function subscribePresence(listener: PresenceListener): () => void {
@@ -60,4 +58,3 @@ export function subscribePresence(listener: PresenceListener): () => void {
     publish(0);
   };
 }
-

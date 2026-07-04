@@ -124,8 +124,11 @@ function venueName(value: unknown): string | undefined {
 function normalize(match: SportSrcMatch, groupedLeague?: SportSrcLeague, venue?: unknown): NormalizedSportsEvent {
   const league = match.league ?? groupedLeague;
   if (!league) throw new Error("SPORTSRC_MISSING_LEAGUE");
-  const homeKey = match.teams.home.code ?? match.teams.home.name;
-  const awayKey = match.teams.away.code ?? match.teams.away.name;
+  // Short codes are not globally unique (for example MAR can represent a
+  // national team or a club). Include the full name to prevent catalog rows
+  // from overwriting unrelated teams.
+  const homeKey = `${match.teams.home.name}-${match.teams.home.code ?? ""}`;
+  const awayKey = `${match.teams.away.name}-${match.teams.away.code ?? ""}`;
   const leagueKey = `${league.country ?? "international"}-${league.name}`;
 
   return normalizedSportsEventSchema.parse({

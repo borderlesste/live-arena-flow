@@ -90,6 +90,23 @@ describe("Supabase migrations", () => {
         has_table_privilege('authenticated', 'public.web_analytics_daily', 'SELECT') as authenticated_select
     `);
     expect(webAnalytics.rows[0]).toEqual({ rls_enabled: true, authenticated_select: false });
+    const publicChat = await db.query<{ anon_read: boolean; anon_insert: boolean }>(`
+      select
+        has_table_privilege('anon', 'public.chat_messages', 'SELECT') as anon_read,
+        has_table_privilege('anon', 'public.chat_messages', 'INSERT') as anon_insert
+    `);
+    expect(publicChat.rows[0]).toEqual({ anon_read: true, anon_insert: false });
+    const unsafeProfileId = "00000000-0000-4000-8000-000000000001";
+    await db.query("insert into auth.users (id, email) values ($1, $2)", [unsafeProfileId, "unsafe@example.com"]);
+    await expect(
+      db.query("insert into public.profiles (id, display_name) values ($1, $2)", [unsafeProfileId, "<script>alert(1)</script>"]),
+    ).rejects.toThrow(/profiles_display_name_safe/);
+    const firstUserId = "00000000-0000-4000-8000-000000000010";
+    const secondUserId = "00000000-0000-4000-8000-000000000011";
+    await db.query("insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)", [firstUserId, "first@example.com", { display_name: "Nombre Único" }]);
+    await expect(
+      db.query("insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)", [secondUserId, "second@example.com", { display_name: "nombre u\u0301nico" }]),
+    ).rejects.toThrow(/profiles_display_name_unique_ci/);
     await db.close();
   }, 20_000);
 

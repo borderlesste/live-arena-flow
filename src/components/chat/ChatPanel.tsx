@@ -13,6 +13,7 @@ import type { ChatMessage } from "@/types";
 import { reportChatMessage } from "@/services/chat.service";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { usePresence } from "@/hooks/usePresence";
+import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
 
 const EMOJIS = ["⚽", "🏀", "🔥", "👏", "🎉", "💪", "😂", "😮", "🤩", "❤️"];
@@ -26,6 +27,7 @@ interface ChatPanelProps {
 export function ChatPanel({ className, matchTitle, roomKey = "global" }: ChatPanelProps) {
   const { messages, send, slowModeRemaining, pinned } = useChat(roomKey);
   const onlineCount = usePresence();
+  const auth = useAuth();
   const [channel, setChannel] = useState<"community" | "official">("community");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +130,7 @@ export function ChatPanel({ className, matchTitle, roomKey = "global" }: ChatPan
           >
             {filtered.length === 0 ? (
               <p className="px-2 py-8 text-center text-sm text-muted-foreground">Aún no hay mensajes en este canal.</p>
-            ) : filtered.map((m) => <ChatMessageItem key={m.id} message={m} />)}
+            ) : filtered.map((m) => <ChatMessageItem key={m.id} message={m} canReport={auth.authenticated} />)}
           </div>
 
           {showJump ? (
@@ -142,49 +144,58 @@ export function ChatPanel({ className, matchTitle, roomKey = "global" }: ChatPan
             </Button>
           ) : null}
 
-          <div className="border-t border-border bg-surface/40 p-2.5">
-            <div className="flex items-end gap-2">
-              <Textarea
-                value={text}
-                onChange={(e) => { setText(e.target.value.slice(0, 280)); setError(null); }}
-                onKeyDown={onKey}
-                placeholder={slowModeRemaining > 0 ? `Modo lento: espera ${slowModeRemaining}s` : "Escribe un mensaje…"}
-                rows={1}
-                aria-label="Mensaje del chat"
-                aria-invalid={error ? true : undefined}
-                disabled={slowModeRemaining > 0 || !online}
-                className="min-h-[40px] resize-none bg-surface-2"
-                maxLength={280}
-              />
-              <div className="flex flex-col items-center gap-1">
-                <Button
-                  type="button"
-                  size="icon"
-                  className="h-10 w-10"
-                  onClick={() => void submit()}
-                  disabled={slowModeRemaining > 0 || !online || text.trim().length === 0}
-                  aria-label="Enviar mensaje"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+          {auth.isLoading ? (
+            <div className="border-t border-border bg-surface/40 p-3 text-center text-sm text-muted-foreground">Comprobando tu sesión…</div>
+          ) : !auth.authenticated ? (
+            <div className="border-t border-border bg-surface/40 p-3 text-center">
+              <p className="text-sm text-muted-foreground">Puedes leer el chat y ver cuántas personas están conectadas.</p>
+              <Button asChild size="sm" className="mt-2"><Link to="/profile">Inicia sesión o crea una cuenta para escribir</Link></Button>
+            </div>
+          ) : (
+            <div className="border-t border-border bg-surface/40 p-2.5">
+              <div className="flex items-end gap-2">
+                <Textarea
+                  value={text}
+                  onChange={(e) => { setText(e.target.value.slice(0, 280)); setError(null); }}
+                  onKeyDown={onKey}
+                  placeholder={slowModeRemaining > 0 ? `Modo lento: espera ${slowModeRemaining}s` : "Escribe un mensaje…"}
+                  rows={1}
+                  aria-label="Mensaje del chat"
+                  aria-invalid={error ? true : undefined}
+                  disabled={slowModeRemaining > 0 || !online}
+                  className="min-h-[40px] resize-none bg-surface-2"
+                  maxLength={280}
+                />
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="h-10 w-10"
+                    onClick={() => void submit()}
+                    disabled={slowModeRemaining > 0 || !online || text.trim().length === 0}
+                    aria-label="Enviar mensaje"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => insertEmoji(e)}
+                    className="rounded px-1.5 py-0.5 text-base hover:bg-surface-2"
+                    aria-label={`Insertar ${e}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+                <span className="ml-auto tabular-nums">{text.length}/280</span>
+              </div>
+              {error ? <p role="alert" className="mt-1 text-xs text-destructive">{error}</p> : null}
             </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-              {EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => insertEmoji(e)}
-                  className="rounded px-1.5 py-0.5 text-base hover:bg-surface-2"
-                  aria-label={`Insertar ${e}`}
-                >
-                  {e}
-                </button>
-              ))}
-              <span className="ml-auto tabular-nums">{text.length}/280</span>
-            </div>
-            {error ? <p role="alert" className="mt-1 text-xs text-destructive">{error}</p> : null}
-          </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -196,7 +207,7 @@ export function ChatPanel({ className, matchTitle, roomKey = "global" }: ChatPan
   );
 }
 
-function ChatMessageItem({ message }: { message: ChatMessage }) {
+function ChatMessageItem({ message, canReport }: { message: ChatMessage; canReport: boolean }) {
   const hour = format(new Date(message.createdAt), "HH:mm");
   return (
     <div className="flex items-start gap-2.5">
@@ -217,7 +228,7 @@ function ChatMessageItem({ message }: { message: ChatMessage }) {
         </p>
         <p className="break-words text-sm text-foreground/95">{message.text}</p>
         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-          {isSupabaseConfigured ? <Tooltip>
+          {isSupabaseConfigured && canReport ? <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" onClick={() => void reportChatMessage(message.id).then(() => toast.success("Mensaje reportado")).catch((error) => toast.error(error instanceof Error ? error.message : "No se pudo reportar"))} className="rounded p-0.5 hover:bg-surface-2" aria-label="Reportar">
                 <Flag className="h-3.5 w-3.5" />

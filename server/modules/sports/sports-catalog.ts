@@ -102,7 +102,10 @@ function eventFromRow(row: CatalogMatchRow): NormalizedSportsEvent | undefined {
 
 function dateRange(date: string): { start: string; end: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("INVALID_SPORTS_DATE");
-  const start = new Date(`${date}T00:00:00-03:00`);
+  // SportSRC groups `date=YYYY-MM-DD` by UTC. Persisted reads must use the
+  // same boundary or early World Championship matches disappear while games
+  // from the next provider day leak into the response.
+  const start = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(start.getTime())) throw new Error("INVALID_SPORTS_DATE");
   return { start: start.toISOString(), end: new Date(start.getTime() + 86_400_000).toISOString() };
 }

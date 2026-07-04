@@ -117,6 +117,23 @@ describe("SportSRC V2 provider", () => {
     fetchMock.mockRestore();
   });
 
+  it("does not collide national teams and clubs that share a short code", async () => {
+    const matches = [
+      { ...sportSrcMatch, id: "national", teams: { home: { name: "Morocco", code: "MAR" }, away: sportSrcMatch.teams.away } },
+      { ...sportSrcMatch, id: "club", teams: { home: { name: "IFK Mariehamn", code: "MAR" }, away: sportSrcMatch.teams.away } },
+    ];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: [{ league: sportSrcLeague, matches }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const events = await new SportSrcProvider("license-key").eventsByDate("2026-07-04");
+
+    expect(events[0].homeTeam.id).not.toBe(events[1].homeTeam.id);
+    expect(events.map((item) => item.homeTeam.name)).toEqual(["Morocco", "IFK Mariehamn"]);
+    fetchMock.mockRestore();
+  });
+
   it("requests live matches with one inprogress query", async () => {
     const liveMatch = { ...sportSrcMatch, status: "inprogress", status_detail: "Halftime" };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(listPayload(liveMatch)), {

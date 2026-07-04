@@ -28,6 +28,7 @@ import {
   type LiveSourceStatus,
 } from "../src/schemas/live-source.schema.js";
 import { localMatchInputSchema } from "../src/schemas/local-match.schema.js";
+import { authCredentialsSchema, authRegistrationSchema, displayNameKey, displayNameSchema } from "../src/schemas/auth.schema.js";
 import {
   cloudflareBackfillStart,
   getCloudflareWebAnalyticsConfig,
@@ -189,12 +190,12 @@ const contactSchema = z.object({
   subject: z.string().trim().max(160).optional(),
   message: z.string().trim().min(1).max(2000),
 });
-const credentialsSchema = z.object({ email: z.string().trim().email().max(160), password: z.string().min(8).max(128) });
-const registerSchema = credentialsSchema.extend({ displayName: z.string().trim().min(2).max(40) });
+const credentialsSchema = authCredentialsSchema;
+const registerSchema = authRegistrationSchema;
 const profileSchema = z.object({
-  displayName: z.string().trim().min(2).max(40),
+  displayName: displayNameSchema,
   preferences: z.object({ matchReminders: z.boolean() }),
-});
+}).strict();
 const favoriteMatchIdSchema = z.string().trim().min(1).max(160);
 const liveSourceIdSchema = z.string().uuid();
 const brandAssetSchema = z.string().trim().min(1).max(500).refine((value) => value.startsWith("/") || URL.canParse(value), "Ruta de asset inválida");
@@ -1106,7 +1107,6 @@ const server = createServer(async (request, response) => {
       if (!LEGACY_AUTH_ENABLED) return json(response, 410, { error: "Usa Supabase Auth" });
       const input = registerSchema.parse(await readBody(request));
       const email = input.email.toLowerCase();
-      if ((await readStore()).users.some((user) => user.email === email)) return json(response, 409, { error: "Ya existe una cuenta con ese correo" });
       const salt = randomBytes(16).toString("hex");
       const user: StoredUser = {
         id: crypto.randomUUID(),
@@ -1117,7 +1117,14 @@ const server = createServer(async (request, response) => {
         createdAt: new Date().toISOString(),
         preferences: { matchReminders: false },
       };
-      await updateStore((store) => { store.users.push(user); });
+      let conflict: "email" | "displayName" | undefined;
+      await updateStore((store) => {
+        if (store.users.some((current) => current.email === email)) { conflict = "email"; return; }
+        if (store.users.some((current) => displayNameKey(current.displayName) === displayNameKey(input.displayName))) { conflict = "displayName"; return; }
+        store.users.push(user);
+      });
+      if (conflict === "email") return json(response, 409, { error: "Ya existe una cuenta con ese correo" });
+      if (conflict === "displayName") return json(response, 409, { error: "Ese nombre visible ya está en uso" });
       return json(response, 201, { token: await createSession(user.id), user: publicUser(user) });
     }
 
@@ -1147,10 +1154,16 @@ const server = createServer(async (request, response) => {
       const user = await authenticatedUser(request);
       if (!user) return json(response, 401, { error: "Sesión no válida" });
       const input = profileSchema.parse(await readBody(request));
+      let displayNameConflict = false;
       const data = await updateStore((store) => {
         const current = store.users.find((item) => item.id === user.id);
+        if (store.users.some((item) => item.id !== user.id && displayNameKey(item.displayName) === displayNameKey(input.displayName))) {
+          displayNameConflict = true;
+          return;
+        }
         if (current) { current.displayName = input.displayName; current.preferences = input.preferences; }
       });
+      if (displayNameConflict) return json(response, 409, { error: "Ese nombre visible ya está en uso" });
       return json(response, 200, publicUser(data.users.find((item) => item.id === user.id)!));
     }
 

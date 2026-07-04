@@ -18,6 +18,7 @@ import {
   hasVerifiedRecoverySession,
   register,
   requestPasswordReset,
+  resolveAuthRedirect,
   resendSignupConfirmation,
   updatePassword,
 } from "./auth.service";
@@ -26,6 +27,22 @@ describe("account verification and recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+  });
+
+  it("never puts a loopback origin in emails requested from the public site", () => {
+    expect(resolveAuthRedirect(
+      "/auth/confirm",
+      "http://localhost:8080",
+      "https://www.luisromerofutbol.com",
+    )).toBe("https://www.luisromerofutbol.com/auth/confirm");
+  });
+
+  it("keeps the configured canonical production origin", () => {
+    expect(resolveAuthRedirect(
+      "/auth/update-password",
+      "https://www.luisromerofutbol.com",
+      "https://preview.example.com",
+    )).toBe("https://www.luisromerofutbol.com/auth/update-password");
   });
 
   it("treats signup without a session as pending email verification", async () => {
@@ -37,6 +54,24 @@ describe("account verification and recovery", () => {
     });
     const options = auth.signUp.mock.calls[0][0].options;
     expect(new URL(options.emailRedirectTo).pathname).toBe("/auth/confirm");
+  });
+
+  it("rejects executable markup in a public display name before calling Supabase", async () => {
+    await expect(register("<script>alert(1)</script>", "user@example.com", "password-123"))
+      .rejects.toThrow("no puede contener < ni >");
+    expect(auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it("does not present an existing email as a newly created account", async () => {
+    auth.signUp.mockResolvedValue({ data: { user: { email: "user@example.com", identities: [] }, session: null }, error: null });
+    await expect(register("Usuario", "user@example.com", "password-123"))
+      .rejects.toThrow("Si ese correo ya está registrado");
+  });
+
+  it("reports a database-enforced duplicate display name", async () => {
+    auth.signUp.mockResolvedValue({ data: { user: null, session: null }, error: { code: "23505", message: "profiles_display_name_unique_ci" } });
+    await expect(register("Usuario", "other@example.com", "password-123"))
+      .rejects.toThrow("Ese nombre visible ya está en uso");
   });
 
   it("resends signup verification to the confirmation route", async () => {
