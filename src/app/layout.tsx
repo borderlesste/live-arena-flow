@@ -45,11 +45,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const analyticsToken = publicEnv.NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN;
+  const shouldLoadAnalytics = analyticsToken && process.env.NODE_ENV === "production";
+
   return (
     <html lang="es">
       <body>
         {children}
-        {analyticsToken ? (
+        {shouldLoadAnalytics ? (
           <Script
             id="cloudflare-web-analytics"
             src="https://static.cloudflareinsights.com/beacon.min.js"

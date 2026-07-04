@@ -401,7 +401,7 @@ export function ObsPublishingOptions({
             {/* Protocolo */}
             <div className="space-y-1.5">
               <Label htmlFor="obs-protocol">Protocolo de ingestión</Label>
-              <Select value="rtmps" onValueChange={onObsProtocolChange as (v: string) => void} disabled>
+              <Select value={obsProtocol} onValueChange={onObsProtocolChange as (v: string) => void}>
                 <SelectTrigger id="obs-protocol" className="bg-surface-2 border-border/60">
                   <SelectValue />
                 </SelectTrigger>
@@ -665,6 +665,12 @@ export function StreamCredentialsPanel({
             {/* URL HLS de reproducción */}
             {isRestreamCloudflare ? (
               <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                  <p className="font-semibold">Puente Restream → Cloudflare activo</p>
+                  <p className="mt-1">
+                    OBS debe publicar en Restream; después el canal Custom RTMP en Restream debe entregar la señal a Cloudflare para que aparezca el HLS.
+                  </p>
+                </div>
                 <div>
                   <p className="text-xs font-semibold text-foreground">Destino Cloudflare para Restream</p>
                   <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
