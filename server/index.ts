@@ -34,7 +34,8 @@ import {
   getCloudflareWebAnalyticsConfig,
   periodRange,
   summarizeWebAnalytics,
-  syncCloudflareWebAnalytics,
+    playbackUrl: row.playback_url ?? undefined,
+    coverImageUrl: row.cover_image_url ?? undefined,
   type StoredWebAnalyticsRow,
   type WebAnalyticsPeriod,
 } from "./modules/analytics/web-analytics.js";
@@ -466,6 +467,7 @@ function liveSourceToRow(source: StoredVideoSource) {
     status_message: source.statusMessage || null,
     is_enabled: source.isEnabled !== false,
     is_primary: source.isPrimary === true,
+    cover_image_url: source.coverImageUrl || null,
     recording_enabled: source.recordingEnabled === true,
     low_latency_enabled: source.lowLatencyEnabled === true,
     created_at: source.createdAt,
@@ -1579,6 +1581,7 @@ const server = createServer(async (request, response) => {
         idempotencyFingerprint: fingerprint,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        coverImageUrl: body.coverImageUrl || undefined,
       };
 
       if (newSource.sourceKind === "manual") {
@@ -1788,6 +1791,7 @@ const server = createServer(async (request, response) => {
         currentSource.matchId = body.matchId;
         currentSource.catalogMatchId = catalogMatchId;
       }
+      if (body.coverImageUrl !== undefined) currentSource.coverImageUrl = body.coverImageUrl || undefined;
       if (body.isPrimary !== undefined) currentSource.isPrimary = body.isPrimary === true;
       if (body.lowLatencyEnabled !== undefined) currentSource.lowLatencyEnabled = body.lowLatencyEnabled === true;
       if (body.recordingEnabled !== undefined) currentSource.recordingEnabled = body.recordingEnabled === true;

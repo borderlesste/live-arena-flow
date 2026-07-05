@@ -91,6 +91,7 @@ const AdminPage = () => {
   const [purpose, setPurpose] = useState<"live" | "highlight">("live");
   const [format, setFormat] = useState<string>("hls");
   const [playbackUrl, setPlaybackUrl] = useState("");
+  const [coverImageUrl, setCoverImageUrl] = useState("");
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
   // ── OBS form state ────────────────────────────────────────────────────────
@@ -207,6 +208,7 @@ const AdminPage = () => {
     setPurpose("live");
     setFormat("hls");
     setPlaybackUrl("");
+    setCoverImageUrl("");
     setObsEnabled(false);
     setObsProtocol("rtmps");
     setObsIngestMode("configured");
@@ -229,6 +231,7 @@ const AdminPage = () => {
     setPurpose(source.usageType === "highlight" ? "highlight" : "live");
     setFormat(source.sourceKind === "obs" ? "hls" : source.type);
     setPlaybackUrl(source.playbackUrl || source.url || source.embedUrl || "");
+    setCoverImageUrl(source.coverImageUrl || "");
     setObsEnabled(source.sourceKind === "obs");
     setObsProtocol(source.ingestProtocol || "rtmps");
     setObsIngestMode(source.provider === "cloudflare_stream" ? "direct_cloudflare" : "configured");
@@ -267,6 +270,7 @@ const AdminPage = () => {
         title: title.trim(),
         usageType: obsEnabled ? "live" : purpose,
       };
+      if (coverImageUrl.trim()) patch.coverImageUrl = coverImageUrl.trim();
       if (!obsEnabled || playbackUrl.trim()) {
         patch.playbackUrl = playbackUrl.trim();
       }
@@ -302,6 +306,7 @@ const AdminPage = () => {
           usageType: obsEnabled ? "live" : purpose,
           playbackFormat: obsEnabled ? "hls" : format,
           playbackUrl: obsEnabled ? undefined : playbackUrl.trim(),
+          coverImageUrl: coverImageUrl.trim() || undefined,
           ingestProtocol: obsEnabled ? obsProtocol : undefined,
           ingestMode: obsEnabled ? obsIngestMode : undefined,
           recordingEnabled: obsEnabled ? recordingEnabled : undefined,
@@ -562,6 +567,8 @@ const AdminPage = () => {
           onFormatChange={setFormat}
           playbackUrl={playbackUrl}
           onPlaybackUrlChange={setPlaybackUrl}
+          coverImageUrl={coverImageUrl}
+          onCoverImageUrlChange={setCoverImageUrl}
           isObsEnabled={obsEnabled}
           isEventsLoading={isEventsLoading}
           isEventsError={isEventsError}

@@ -141,10 +141,10 @@ function renderPlayerBody({
 
   // Active
   if (adapter === "hls" && source.url) {
-    return <HlsPlayer src={source.url} onStatusChange={(next) => { if (next === "error") onSourceError(); }} className="absolute inset-0 h-full w-full object-cover" />;
+    return <HlsPlayer src={source.url} poster={source.coverImageUrl} onStatusChange={(next) => { if (next === "error") onSourceError(); }} className="absolute inset-0 h-full w-full object-cover" />;
   }
   if (adapter === "html5" && source.url) {
-    return <Html5Player src={source.url} audioOnly={source.type === "mp3"} onError={onSourceError} className={source.type === "mp3" ? "absolute inset-x-6 bottom-1/2 w-[calc(100%-3rem)] translate-y-1/2" : "absolute inset-0 h-full w-full object-cover"} />;
+    return <Html5Player src={source.url} audioOnly={source.type === "mp3"} poster={source.coverImageUrl} onError={onSourceError} className={source.type === "mp3" ? "absolute inset-x-6 bottom-1/2 w-[calc(100%-3rem)] translate-y-1/2" : "absolute inset-0 h-full w-full object-cover"} />;
   }
   if (adapter === "embed" && source.embedUrl) {
     return (

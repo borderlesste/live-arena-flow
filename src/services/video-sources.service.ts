@@ -22,6 +22,8 @@ export interface ManagedVideoSource extends StreamSource {
   statusMessage?: string;
   isEnabled?: boolean;
   isPrimary?: boolean;
+  /** Optional cover / poster image URL for the player (HTTPS). */
+  coverImageUrl?: string;
   recordingEnabled?: boolean;
   lowLatencyEnabled?: boolean;
   updatedAt?: string;
@@ -43,6 +45,7 @@ export interface CreateLiveSourcePayload {
   ingestMode?: ObsIngestMode;
   recordingEnabled?: boolean;
   lowLatencyEnabled?: boolean;
+  coverImageUrl?: string;
   /** Idempotency key — prevents duplicate entries on double-click */
   idempotencyKey: string;
 }

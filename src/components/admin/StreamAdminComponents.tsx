@@ -49,6 +49,8 @@ interface GeneralFormProps {
   onFormatChange: (val: string) => void;
   playbackUrl: string;
   onPlaybackUrlChange: (val: string) => void;
+  coverImageUrl?: string;
+  onCoverImageUrlChange?: (val: string) => void;
   isObsEnabled: boolean;
   isEventsLoading: boolean;
   isEventsError: boolean;
@@ -240,6 +242,24 @@ export function SourceGeneralForm({
           {titleError && (
             <p id="source-title-error" className="text-xs text-destructive" role="alert">{titleError}</p>
           )}
+        </div>
+
+        {/* Cover image */}
+        <div className="space-y-1.5">
+          <Label htmlFor="source-cover">Portada (URL HTTPS)</Label>
+          <Input
+            id="source-cover"
+            value={coverImageUrl || ""}
+            onChange={(e) => onCoverImageUrlChange?.(e.target.value)}
+            placeholder="https://.../cover.jpg"
+            className="bg-surface-2 border-border/60"
+            aria-describedby={undefined}
+          />
+          {coverImageUrl ? (
+            <div className="mt-2 w-full overflow-hidden rounded-md border border-border/40 bg-surface-2">
+              <img src={coverImageUrl} alt="Vista previa portada" className="h-28 w-full object-cover" />
+            </div>
+          ) : null}
         </div>
 
         {/* Purpose + Format */}
@@ -874,13 +894,18 @@ export function ConfiguredSourcesList({
               <CardContent className="p-4 flex flex-col justify-between min-h-[160px]">
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1 pr-6">
-                      <p className="font-display font-bold text-base truncate leading-snug group-hover:text-primary transition-colors">
-                        {source.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {eventLabel(source.matchId)}
-                      </p>
+                    <div className="min-w-0 flex-1 pr-6 flex items-start gap-3">
+                      {source.coverImageUrl ? (
+                        <img src={source.coverImageUrl} alt="Portada" className="h-12 w-20 flex-shrink-0 rounded-md object-cover" />
+                      ) : null}
+                      <div className="min-w-0">
+                        <p className="font-display font-bold text-base truncate leading-snug group-hover:text-primary transition-colors">
+                          {source.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {eventLabel(source.matchId)}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Menú de acciones — stopPropagation para no activar onSelect */}

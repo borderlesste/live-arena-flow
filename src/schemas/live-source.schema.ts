@@ -42,6 +42,7 @@ export const createLiveSourceSchema = z.object({
   usageType: z.enum(["live", "highlight", "prerecorded"]),
   playbackFormat: z.string().trim().min(1).max(32).optional(),
   playbackUrl: publicPlaybackUrlSchema.optional(),
+  coverImageUrl: z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL de la portada debe usar HTTPS").optional(),
   ingestProtocol: z.enum(["rtmp", "rtmps", "srt"]).optional(),
   ingestMode: obsIngestModeSchema.optional(),
   recordingEnabled: z.boolean().optional(),
@@ -62,6 +63,7 @@ export type CreateLiveSourceInput = z.infer<typeof createLiveSourceSchema>;
 export const updateLiveSourceSchema = z.object({
   title: z.string().trim().min(1).max(100).optional(),
   matchId: z.string().trim().min(1).max(160).optional(),
+  coverImageUrl: z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL de la portada debe usar HTTPS").optional(),
   isPrimary: z.boolean().optional(),
   lowLatencyEnabled: z.boolean().optional(),
   recordingEnabled: z.boolean().optional(),
