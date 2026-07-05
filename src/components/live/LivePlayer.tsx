@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { HlsPlayer } from "./HlsPlayer";
 import { EmbedPlayer } from "./EmbedPlayer";
 import { Html5Player } from "./Html5Player";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLiveStream } from "@/hooks/useLiveStream";
 import { pickAdapter } from "@/services/streaming.service";
-import { AlertTriangle, WifiOff, RefreshCw, Ban } from "lucide-react";
+import { AlertTriangle, WifiOff, RefreshCw, Ban, Play } from "lucide-react";
 import type { Match, StreamSource, Team } from "@/types";
 
 interface LivePlayerProps {
@@ -25,6 +25,8 @@ interface LivePlayerProps {
 export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChangeStream }: LivePlayerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [selectedStreamId, setSelectedStreamId] = useState<string | undefined>(match.streams[0]?.id);
+  const [hasStarted, setHasStarted] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const source: StreamSource | undefined = useMemo(
     () => match.streams.find((s) => s.id === selectedStreamId) ?? match.streams[0],
@@ -35,6 +37,10 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   const adapter = source ? pickAdapter(source) : "unsupported";
   const mediaControlsEnabled = status === "live" && (adapter === "hls" || adapter === "html5");
   const isLive = match.status === "live" || match.status === "halftime";
+
+  useEffect(() => {
+    setHasStarted(false);
+  }, [selectedStreamId]);
 
   function handleSelect(v: string) {
     setSelectedStreamId(v);
@@ -47,13 +53,41 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
     if (fallback) handleSelect(fallback.id);
   }
 
+  const hasCoverPoster = Boolean(source?.coverImageUrl);
+  const showCoverOverlay = hasCoverPoster && !hasStarted;
+
+  const handlePlayClick = () => {
+    setHasStarted(true);
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {
+        // Autoplay may be blocked; UI remains usable.
+      });
+    }
+  };
+
   return (
     <div ref={containerRef} className="surface-card relative min-w-0 overflow-hidden rounded-xl shadow-glow">
       <div className="relative aspect-[4/3] w-full bg-black sm:aspect-video">
-        {renderPlayerBody({ status, adapter, source, retry, onSourceError: handleSourceError })}
+        {renderPlayerBody({ status, adapter, source, retry, onSourceError: handleSourceError, hasStarted, videoRef })}
+
+        {showCoverOverlay ? (
+          <div className="absolute inset-0 z-15 flex items-center justify-center bg-black/60">
+            <img src={source?.coverImageUrl} alt={`Portada de ${source?.title}`} className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-black/20" />
+            <button
+              type="button"
+              onClick={handlePlayClick}
+              className="relative z-20 inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg transition hover:bg-slate-100"
+              aria-label="Reproducir transmisión"
+            >
+              <Play className="h-4 w-4" />
+              Reproducir
+            </button>
+          </div>
+        ) : null}
 
         {/* Overlay (top) */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/60 to-transparent">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/60 to-transparent">
           <Scoreboard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competitionName={competitionName} />
         </div>
 
@@ -84,8 +118,8 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
 }
 
 function renderPlayerBody({
-  status, adapter, source, retry, onSourceError,
-}: { status: string; adapter: ReturnType<typeof pickAdapter>; source: StreamSource | undefined; retry: () => void; onSourceError: () => void; }) {
+  status, adapter, source, retry, onSourceError, hasStarted, videoRef,
+}: { status: string; adapter: ReturnType<typeof pickAdapter>; source: StreamSource | undefined; retry: () => void; onSourceError: () => void; hasStarted: boolean; videoRef: RefObject<HTMLVideoElement> }) {
   if (status === "loading") {
     return <div className="absolute inset-0 grid place-items-center"><SkeletonLoader className="absolute inset-0 h-full w-full rounded-none" /><BrandLogo variant="white" size="lg" withWordmark={false} decorative className="relative z-10 animate-pulse opacity-80" /></div>;
   }
@@ -141,10 +175,10 @@ function renderPlayerBody({
 
   // Active
   if (adapter === "hls" && source.url) {
-    return <HlsPlayer src={source.url} poster={source.coverImageUrl} onStatusChange={(next) => { if (next === "error") onSourceError(); }} className="absolute inset-0 h-full w-full object-cover" />;
+    return <HlsPlayer src={source.url} poster={source.coverImageUrl} autoPlay={hasStarted} videoRef={videoRef} onStatusChange={(next) => { if (next === "error") onSourceError(); }} className="absolute inset-0 h-full w-full object-cover" />;
   }
   if (adapter === "html5" && source.url) {
-    return <Html5Player src={source.url} audioOnly={source.type === "mp3"} poster={source.coverImageUrl} onError={onSourceError} className={source.type === "mp3" ? "absolute inset-x-6 bottom-1/2 w-[calc(100%-3rem)] translate-y-1/2" : "absolute inset-0 h-full w-full object-cover"} />;
+    return <Html5Player src={source.url} audioOnly={source.type === "mp3"} poster={source.coverImageUrl} autoPlay={hasStarted} videoRef={videoRef} onError={onSourceError} className={source.type === "mp3" ? "absolute inset-x-6 bottom-1/2 w-[calc(100%-3rem)] translate-y-1/2" : "absolute inset-0 h-full w-full object-cover"} />;
   }
   if (adapter === "embed" && source.embedUrl) {
     return (

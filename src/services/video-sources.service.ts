@@ -76,6 +76,12 @@ export function listPublicVideoSources(): Promise<ManagedVideoSource[]> {
   return fetch(`${API_BASE}/video-sources`).then(parseResponse<ManagedVideoSource[]>);
 }
 
+export async function getPrimaryStream(): Promise<ManagedVideoSource | null> {
+  const res = await fetch(`${API_BASE}/streams/primary`);
+  if (res.status === 404) return null;
+  return parseResponse<ManagedVideoSource>(res);
+}
+
 export function listManagedVideoSources(token: string): Promise<ManagedVideoSource[]> {
   return fetch(`${API_BASE}/admin/live-sources`, {
     headers: { Authorization: `Bearer ${token}` },

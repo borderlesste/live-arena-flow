@@ -34,8 +34,6 @@ import {
   getCloudflareWebAnalyticsConfig,
   periodRange,
   summarizeWebAnalytics,
-    playbackUrl: row.playback_url ?? undefined,
-    coverImageUrl: row.cover_image_url ?? undefined,
   type StoredWebAnalyticsRow,
   type WebAnalyticsPeriod,
 } from "./modules/analytics/web-analytics.js";
@@ -384,6 +382,7 @@ interface LiveSourceRow {
   status_message: string | null;
   is_enabled: boolean;
   is_primary: boolean;
+  cover_image_url?: string | null;
   recording_enabled: boolean;
   low_latency_enabled: boolean;
   created_at: string;
@@ -413,6 +412,7 @@ function liveSourceFromRow(row: LiveSourceRow): StoredVideoSource {
     playbackUrl: row.playback_url ?? undefined,
     playbackFormat: row.playback_format,
     playbackUrlVerified: row.playback_url_verified === true,
+    coverImageUrl: row.cover_image_url ?? undefined,
     providerInputId: row.provider_input_id ?? undefined,
     ingestProtocol: row.ingest_protocol ?? undefined,
     ingestUrl: row.ingest_url ?? undefined,
@@ -1929,6 +1929,26 @@ const server = createServer(async (request, response) => {
       return json(response, 200, { success: true });
     }
     if (request.method === "GET" && url.pathname === "/api/streams") return json(response, 200, publicStreams((await readStore()).streams));
+    if (request.method === "GET" && url.pathname === "/api/streams/primary") {
+      // Return the globally marked primary stream (if any). Supports Supabase and local store.
+      if (canUseAdminSupabase()) {
+        const { data, error } = await getAdminSupabaseClient()
+          .from("live_sources")
+          .select("*")
+          .is("deleted_at", null)
+          .eq("is_primary", true)
+          .eq("is_enabled", true)
+          .maybeSingle();
+        if (error) return json(response, 500, { error: error.message });
+        if (!data) return json(response, 404, { error: "No primary stream" });
+        const src = sanitizeManagedSource(liveSourceFromRow(data as LiveSourceRow));
+        return json(response, 200, src);
+      }
+      const store = await readStore();
+      const found = store.videoSources.find((s) => s.isPrimary && s.isEnabled !== false);
+      if (!found) return json(response, 404, { error: "No primary stream" });
+      return json(response, 200, sanitizeManagedSource(found));
+    }
     if (request.method === "GET" && url.pathname === "/api/admin/video-sources") {
       if (!await isAdmin(request)) return json(response, 403, { error: "No autorizado" });
       return json(response, 200, managedVideoSources((await readStore()).videoSources));

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalPersistedImageSchema } from "./image.schema";
 
 const publicPlaybackUrlSchema = z.string().url().refine((value) => {
   const url = new URL(value);
@@ -35,6 +36,13 @@ export const streamCredentialsSchema = z.object({
 
 export type StreamCredentials = z.infer<typeof streamCredentialsSchema>;
 
+const optionalHttpsUrlSchema = z.string().url().refine((value) => {
+  const url = new URL(value);
+  return url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname));
+}, "La URL pública debe usar HTTPS").optional().or(z.literal(""));
+
+const coverImageUrlSchema = z.union([optionalHttpsUrlSchema, optionalPersistedImageSchema]);
+
 export const createLiveSourceSchema = z.object({
   matchId: z.string().trim().min(1).max(160),
   title: z.string().trim().min(1).max(100),
@@ -42,7 +50,7 @@ export const createLiveSourceSchema = z.object({
   usageType: z.enum(["live", "highlight", "prerecorded"]),
   playbackFormat: z.string().trim().min(1).max(32).optional(),
   playbackUrl: publicPlaybackUrlSchema.optional(),
-  coverImageUrl: z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL de la portada debe usar HTTPS").optional(),
+  coverImageUrl: coverImageUrlSchema,
   ingestProtocol: z.enum(["rtmp", "rtmps", "srt"]).optional(),
   ingestMode: obsIngestModeSchema.optional(),
   recordingEnabled: z.boolean().optional(),
@@ -63,7 +71,7 @@ export type CreateLiveSourceInput = z.infer<typeof createLiveSourceSchema>;
 export const updateLiveSourceSchema = z.object({
   title: z.string().trim().min(1).max(100).optional(),
   matchId: z.string().trim().min(1).max(160).optional(),
-  coverImageUrl: z.string().url().refine((value) => new URL(value).protocol === "https:", "La URL de la portada debe usar HTTPS").optional(),
+  coverImageUrl: coverImageUrlSchema,
   isPrimary: z.boolean().optional(),
   lowLatencyEnabled: z.boolean().optional(),
   recordingEnabled: z.boolean().optional(),

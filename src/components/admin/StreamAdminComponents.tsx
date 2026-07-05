@@ -50,7 +50,10 @@ interface GeneralFormProps {
   playbackUrl: string;
   onPlaybackUrlChange: (val: string) => void;
   coverImageUrl?: string;
+  coverImageFileName?: string;
+  coverImageError?: string;
   onCoverImageUrlChange?: (val: string) => void;
+  onCoverImageFileChange?: (file?: File) => void;
   isObsEnabled: boolean;
   isEventsLoading: boolean;
   isEventsError: boolean;
@@ -159,7 +162,7 @@ export function SourceGeneralForm({
   eventDate, onEventDateChange, matches, selectedMatchId, onMatchChange,
   title, onTitleChange, titleError, matchError, playbackUrlError,
   purpose, onPurposeChange, format, onFormatChange,
-  playbackUrl, onPlaybackUrlChange, isObsEnabled,
+  playbackUrl, onPlaybackUrlChange, coverImageUrl, coverImageFileName, coverImageError, onCoverImageUrlChange, onCoverImageFileChange, isObsEnabled,
   isEventsLoading, isEventsError, eventLabel,
   isEditing, onCancelEdit, onSave, createState = "idle",
 }: GeneralFormProps) {
@@ -172,6 +175,7 @@ export function SourceGeneralForm({
     done: "¡Fuente creada!",
   };
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const buttonIcon: Record<CreateButtonState, React.ReactNode> = {
     idle: isEditing ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />,
     provisioning: <Loader2 className="h-4 w-4 animate-spin" />,
@@ -246,15 +250,41 @@ export function SourceGeneralForm({
 
         {/* Cover image */}
         <div className="space-y-1.5">
-          <Label htmlFor="source-cover">Portada (URL HTTPS)</Label>
-          <Input
-            id="source-cover"
-            value={coverImageUrl || ""}
-            onChange={(e) => onCoverImageUrlChange?.(e.target.value)}
-            placeholder="https://.../cover.jpg"
-            className="bg-surface-2 border-border/60"
-            aria-describedby={undefined}
-          />
+          <Label htmlFor="source-cover">Portada (URL HTTPS o imagen local)</Label>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="source-cover"
+                value={coverImageUrl && coverImageUrl.startsWith("data:image/") ? "" : coverImageUrl || ""}
+                onChange={(e) => onCoverImageUrlChange?.(e.target.value)}
+                placeholder="https://.../cover.jpg"
+                className="min-w-0 flex-1 bg-surface-2 border-border/60"
+                aria-describedby={undefined}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="whitespace-nowrap"
+              >
+                Subir imagen
+              </Button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => onCoverImageFileChange?.(e.target.files?.[0])}
+            />
+            <p className="text-xs text-muted-foreground">JPG, PNG o WebP. Máximo 512 KB.</p>
+            {coverImageFileName ? (
+              <p className="text-xs text-muted-foreground">Archivo seleccionado: {coverImageFileName}</p>
+            ) : null}
+            {coverImageError ? (
+              <p className="text-xs text-destructive" role="alert">{coverImageError}</p>
+            ) : null}
+          </div>
           {coverImageUrl ? (
             <div className="mt-2 w-full overflow-hidden rounded-md border border-border/40 bg-surface-2">
               <img src={coverImageUrl} alt="Vista previa portada" className="h-28 w-full object-cover" />

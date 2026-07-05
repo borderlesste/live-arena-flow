@@ -20,6 +20,7 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { useSportsWindow } from "@/hooks/useSportsData";
+import { getPrimaryStream } from "@/services/video-sources.service";
 import { useContentData } from "@/hooks/useContentData";
 import { toast } from "sonner";
 import { formatMatchDate } from "@/lib/format";
@@ -83,6 +84,24 @@ const HomePage = () => {
     if (!primaryMatchId) return;
     if (activeId !== primaryMatchId) setActiveId(primaryMatchId);
   }, [primaryMatchId, activeId]);
+
+  // Also query the dedicated primary-stream endpoint to ensure we pick a primary
+  // source even if it wasn't included in the bundled sources for any reason.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const primary = await getPrimaryStream();
+        if (!primary || cancelled) return;
+        if (primary.matchId && primary.matchId !== activeId) setActiveId(primary.matchId);
+      } catch {
+        // ignore — fallback behaviour already in place
+      }
+    })();
+    return () => { cancelled = true; };
+  // Intentionally run once when the page loads; activeId may be updated above.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isLoading || isContentLoading) return <section className="container mx-auto px-4 py-8 md:px-6"><SkeletonLoader className="h-[520px] w-full" /></section>;
 

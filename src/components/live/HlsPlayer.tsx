@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 interface HlsPlayerProps {
   src: string;
   poster?: string;
   muted?: boolean;
   autoPlay?: boolean;
+  videoRef?: RefObject<HTMLVideoElement>;
   onStatusChange?: (status: "loading" | "playing" | "buffering" | "error") => void;
   className?: string;
 }
@@ -14,8 +15,9 @@ interface HlsPlayerProps {
  * Always cleans up the Hls instance on unmount or src change.
  * Never auto-plays with sound.
  */
-export function HlsPlayer({ src, poster, muted = true, autoPlay = true, onStatusChange, className }: HlsPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+export function HlsPlayer({ src, poster, muted = true, autoPlay = true, videoRef: forwardedRef, onStatusChange, className }: HlsPlayerProps) {
+  const internalRef = useRef<HTMLVideoElement>(null);
+  const videoRef = forwardedRef ?? internalRef;
 
   useEffect(() => {
     const video = videoRef.current;

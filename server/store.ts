@@ -28,6 +28,7 @@ export interface StoredVideoSource {
   playbackFormat?: string;
   playbackUrl?: string;
   playbackUrlVerified?: boolean;
+  coverImageUrl?: string;
   providerInputId?: string;
   ingestProtocol?: "rtmp" | "rtmps" | "srt";
   ingestUrl?: string;

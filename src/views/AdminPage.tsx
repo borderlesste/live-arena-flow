@@ -6,6 +6,7 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useLiveSportsWindow, useSportsDate, useSportsWindow } from "@/hooks/useSportsData";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { imageFileToDataUrl } from "@/lib/image-file";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
@@ -92,6 +93,8 @@ const AdminPage = () => {
   const [format, setFormat] = useState<string>("hls");
   const [playbackUrl, setPlaybackUrl] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [coverImageFileName, setCoverImageFileName] = useState<string | undefined>(undefined);
+  const [coverImageError, setCoverImageError] = useState<string | undefined>(undefined);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
   // ── OBS form state ────────────────────────────────────────────────────────
@@ -209,6 +212,8 @@ const AdminPage = () => {
     setFormat("hls");
     setPlaybackUrl("");
     setCoverImageUrl("");
+    setCoverImageFileName(undefined);
+    setCoverImageError(undefined);
     setObsEnabled(false);
     setObsProtocol("rtmps");
     setObsIngestMode("configured");
@@ -232,6 +237,8 @@ const AdminPage = () => {
     setFormat(source.sourceKind === "obs" ? "hls" : source.type);
     setPlaybackUrl(source.playbackUrl || source.url || source.embedUrl || "");
     setCoverImageUrl(source.coverImageUrl || "");
+    setCoverImageFileName(source.coverImageUrl?.startsWith("data:image/") ? "Imagen cargada" : undefined);
+    setCoverImageError(undefined);
     setObsEnabled(source.sourceKind === "obs");
     setObsProtocol(source.ingestProtocol || "rtmps");
     setObsIngestMode(source.provider === "cloudflare_stream" ? "direct_cloudflare" : "configured");
@@ -257,6 +264,32 @@ const AdminPage = () => {
     return Object.keys(errors).length === 0;
   };
 
+  const handleCoverImageUrlChange = useCallback((value: string) => {
+    setCoverImageUrl(value);
+    if (!value.startsWith("data:image/")) {
+      setCoverImageFileName(undefined);
+      setCoverImageError(undefined);
+    }
+  }, []);
+
+  const handleCoverImageFile = useCallback(async (file?: File) => {
+    if (!file) {
+      setCoverImageFileName(undefined);
+      setCoverImageError(undefined);
+      return;
+    }
+    try {
+      const image = await imageFileToDataUrl(file);
+      setCoverImageFileName(file.name);
+      setCoverImageUrl(image);
+      setCoverImageError(undefined);
+    } catch (error) {
+      setCoverImageFileName(undefined);
+      setCoverImageUrl("");
+      setCoverImageError(error instanceof Error ? error.message : "Error al cargar la imagen.");
+    }
+  }, []);
+
   // ── Main save handler ─────────────────────────────────────────────────────
   const handleSave = async () => {
     if (createState !== "idle" && createState !== "done") return; // guard double-click
@@ -269,8 +302,8 @@ const AdminPage = () => {
         matchId,
         title: title.trim(),
         usageType: obsEnabled ? "live" : purpose,
+        coverImageUrl: coverImageUrl.trim() || "",
       };
-      if (coverImageUrl.trim()) patch.coverImageUrl = coverImageUrl.trim();
       if (!obsEnabled || playbackUrl.trim()) {
         patch.playbackUrl = playbackUrl.trim();
       }
@@ -568,7 +601,10 @@ const AdminPage = () => {
           playbackUrl={playbackUrl}
           onPlaybackUrlChange={setPlaybackUrl}
           coverImageUrl={coverImageUrl}
-          onCoverImageUrlChange={setCoverImageUrl}
+          coverImageFileName={coverImageFileName}
+          coverImageError={coverImageError}
+          onCoverImageUrlChange={handleCoverImageUrlChange}
+          onCoverImageFileChange={handleCoverImageFile}
           isObsEnabled={obsEnabled}
           isEventsLoading={isEventsLoading}
           isEventsError={isEventsError}
