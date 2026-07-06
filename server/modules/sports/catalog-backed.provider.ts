@@ -13,21 +13,38 @@ export class CatalogBackedSportsProvider implements SportsProvider {
 
   async eventsByDate(date: string): Promise<NormalizedSportsEvent[]> {
     if (!this.catalog) return this.upstream.eventsByDate(date);
+    let persistedEvents: NormalizedSportsEvent[] | undefined;
+    try {
+      persistedEvents = await this.catalog.eventsByDate(date);
+    } catch {
+      persistedEvents = undefined;
+    }
+
+    if (persistedEvents && persistedEvents.length > 0) {
+      return persistedEvents;
+    }
+
     let upstreamEvents: NormalizedSportsEvent[] | undefined;
     let upstreamError: unknown;
     try {
       upstreamEvents = await this.upstream.eventsByDate(date);
-      await this.catalog.syncProviderEvents(this.upstream.name, upstreamEvents);
+      if (upstreamEvents.length > 0) {
+        try {
+          await this.catalog.syncProviderEvents(this.upstream.name, upstreamEvents);
+        } catch {
+          console.warn("[sports-catalog] provider sync failed; using persisted catalog", { code: "SPORTS_CATALOG_SYNC_FALLBACK" });
+        }
+      }
     } catch (error) {
       upstreamError = error;
-      console.warn("[sports-catalog] provider sync failed; using persisted catalog", { code: "SPORTS_CATALOG_SYNC_FALLBACK" });
+      if (persistedEvents && persistedEvents.length === 0) {
+        return persistedEvents;
+      }
     }
-    try {
-      return await this.catalog.eventsByDate(date);
-    } catch (catalogError) {
-      if (upstreamEvents) return upstreamEvents;
-      throw upstreamError ?? catalogError;
-    }
+
+    if (upstreamEvents) return upstreamEvents;
+    if (persistedEvents) return persistedEvents;
+    throw upstreamError ?? new Error("SPORTS_CATALOG_MISSING_DATA");
   }
 
   async liveEvents(): Promise<NormalizedSportsEvent[]> {
@@ -50,15 +67,24 @@ export class CatalogBackedSportsProvider implements SportsProvider {
   async eventById(id: string): Promise<NormalizedSportsEvent | undefined> {
     if (!this.catalog) return this.upstream.eventById(id);
     if (id.startsWith("local-")) return this.catalog.eventById(id);
+    const persistedEvent = await this.catalog.eventById(id);
+    if (persistedEvent) {
+      return persistedEvent;
+    }
+
     try {
       const upstreamEvent = await this.upstream.eventById(id);
       if (upstreamEvent) {
-        await this.catalog.syncProviderEvents(this.upstream.name, [upstreamEvent]);
+        try {
+          await this.catalog.syncProviderEvents(this.upstream.name, [upstreamEvent]);
+        } catch {
+          console.warn("[sports-catalog] event provider lookup failed; using persisted catalog", { code: "SPORTS_CATALOG_EVENT_FALLBACK" });
+        }
         return await this.catalog.eventById(id) ?? upstreamEvent;
       }
     } catch {
       console.warn("[sports-catalog] event provider lookup failed; using persisted catalog", { code: "SPORTS_CATALOG_EVENT_FALLBACK" });
     }
-    return this.catalog.eventById(id);
+    return persistedEvent;
   }
 }

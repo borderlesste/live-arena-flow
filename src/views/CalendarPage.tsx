@@ -8,6 +8,7 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useSportsDate, useSportsWindow } from "@/hooks/useSportsData";
+import { MatchFilters, type MatchFilter } from "@/components/matches/MatchFilters";
 import { UpcomingMatchCard } from "@/components/matches/UpcomingMatchCard";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
@@ -15,9 +16,10 @@ import { formatDayGroup } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const CalendarPage = () => {
-  useDocumentMeta({ title: "Calendario", description: "Próximos partidos por fecha y competición." });
+  useDocumentMeta({ title: "Calendario", description: "Próximos partidos por fecha, competición y estado." });
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [comp, setComp] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<MatchFilter>("all");
   const dateKey = date ? format(date, "yyyy-MM-dd") : undefined;
   const windowQuery = useSportsWindow();
   const dateQuery = useSportsDate(dateKey);
@@ -26,9 +28,11 @@ const CalendarPage = () => {
   const { matches, competitions, teams } = bundle;
   const getTeam = (id: string) => teams.find((team) => team.id === id)!;
 
-  const upcoming = useMemo(() => matches.filter((m) => m.status === "scheduled"), [matches]);
   const filtered = useMemo(() => {
-    return upcoming.filter((m) => {
+    return matches.filter((m) => {
+      if (statusFilter === "live" && !["live", "halftime", "paused"].includes(m.status)) return false;
+      if (statusFilter === "upcoming" && m.status !== "scheduled") return false;
+      if (statusFilter === "finished" && m.status !== "finished") return false;
       if (comp !== "all" && m.competitionId !== comp) return false;
       if (date) {
         const sel = format(date, "yyyy-MM-dd");
@@ -37,7 +41,7 @@ const CalendarPage = () => {
       }
       return true;
     }).sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
-  }, [upcoming, comp, date]);
+  }, [matches, statusFilter, comp, date]);
 
   // group by day
   const groups = useMemo(() => {
@@ -80,6 +84,9 @@ const CalendarPage = () => {
             {competitions.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
+      </div>
+      <div className="mt-3">
+        <MatchFilters value={statusFilter} onChange={setStatusFilter} />
       </div>
 
       {activeQuery.isLoading ? <SkeletonLoader className="h-72 w-full" /> : activeQuery.isError ? <ErrorState title="No se pudo cargar el calendario" description="El proveedor deportivo no respondió correctamente." action={<Button onClick={() => void activeQuery.refetch()}>Reintentar</Button>} /> : groups.length === 0 ? (

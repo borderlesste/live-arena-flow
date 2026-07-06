@@ -1,12 +1,14 @@
+import { useMemo } from "react";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { CompetitionCard } from "@/components/competitions/CompetitionCard";
 import { useSportsWindow } from "@/hooks/useSportsData";
 import { EmptyState } from "@/components/feedback/States";
+import { sortCompetitionsByPriority } from "@/lib/format";
 
 const CompetitionsPage = () => {
   useDocumentMeta({ title: "Competiciones", description: "Sigue tus competiciones favoritas y consulta posiciones." });
   const { bundle } = useSportsWindow();
-  const competitions = bundle.competitions;
+  const competitions = useMemo(() => sortCompetitionsByPriority(bundle.competitions), [bundle.competitions]);
   return (
     <section className="container mx-auto space-y-8 px-4 py-6 md:px-6">
       <header>

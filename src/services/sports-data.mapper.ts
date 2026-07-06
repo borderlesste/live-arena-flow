@@ -38,6 +38,22 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
   const teams = new Map<string, Team>();
   const competitions = new Map<string, Competition>();
 
+  const parseFutureDate = (value?: string): number | null => {
+    if (!value) return null;
+    const timestamp = Date.parse(value);
+    return Number.isNaN(timestamp) || timestamp <= Date.now() ? null : timestamp;
+  };
+
+  const pickNextEventAt = (existing?: string, candidate?: string): string | undefined => {
+    const existingTimestamp = parseFutureDate(existing);
+    const candidateTimestamp = parseFutureDate(candidate);
+
+    if (existingTimestamp === null && candidateTimestamp === null) return undefined;
+    if (existingTimestamp === null) return candidate;
+    if (candidateTimestamp === null) return existing;
+    return existingTimestamp <= candidateTimestamp ? existing : candidate;
+  };
+
   const matches = events
     .map((event): Match | null => {
       const sport = mapSport(event.sport);
@@ -57,7 +73,7 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
         id: event.competition.id, name: event.competition.name, region: event.competition.region ?? "Internacional", sport,
         monogram: monogram(event.competition.name), color: colorFor(event.competition.id), badgeUrl: event.competition.badgeUrl,
         activeMatches: (existing?.activeMatches ?? 0) + (event.status === "live" ? 1 : 0),
-        nextEventAt: existing?.nextEventAt && existing.nextEventAt < event.startsAt ? existing.nextEventAt : event.startsAt,
+        nextEventAt: pickNextEventAt(existing?.nextEventAt, event.startsAt),
       });
 
       const managedSources = videoSources.filter((source) => source.matchId === event.id);

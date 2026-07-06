@@ -23,6 +23,8 @@ interface PlayerControlsProps {
   mediaKey?: string;
   isLive?: boolean;
   streamSwitcher?: ReactNode;
+  controlsVisible?: boolean;
+  onControlsInteraction?: () => void;
 }
 
 interface MediaTimeline {
@@ -41,6 +43,8 @@ export function PlayerControls({
   mediaKey,
   isLive = false,
   streamSwitcher,
+  controlsVisible = true,
+  onControlsInteraction,
 }: PlayerControlsProps) {
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(70);
@@ -210,7 +214,10 @@ export function PlayerControls({
   return (
     <div
       data-testid="player-controls"
-      className="pointer-events-auto w-full bg-gradient-to-t from-black via-black/90 to-transparent px-2 pb-2 pt-10 sm:px-3 sm:pb-3 md:px-4"
+      onMouseMove={onControlsInteraction}
+      onTouchStart={onControlsInteraction}
+      onPointerDown={onControlsInteraction}
+      className={cn("pointer-events-auto w-full bg-gradient-to-t from-black via-black/90 to-transparent px-2 pb-2 pt-10 transition-all duration-200 sm:px-3 sm:pb-3 md:px-4", !controlsVisible && "pointer-events-none translate-y-2 opacity-0")}
     >
       <SliderPrimitive.Root
         value={[timeline.current]}

@@ -48,4 +48,18 @@ describe("mapSportsEvents", () => {
       streams: [expect.objectContaining({ id: "source-obs" })],
     });
   });
+
+  it("does not use a past event date as nextEventAt", () => {
+    const pastEvent: NormalizedSportsEvent = {
+      ...event,
+      id: "event-past",
+      startsAt: "2020-01-01T12:00:00.000Z",
+      competition: { id: "league-2", name: "Past League" },
+      status: "finished",
+    };
+
+    const bundle = mapSportsEvents([pastEvent]);
+    expect(bundle.competitions).toHaveLength(1);
+    expect(bundle.competitions[0].nextEventAt).toBeUndefined();
+  });
 });

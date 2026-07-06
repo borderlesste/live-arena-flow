@@ -1,4 +1,4 @@
-import { RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HlsPlayer } from "./HlsPlayer";
 import { EmbedPlayer } from "./EmbedPlayer";
 import { Html5Player } from "./Html5Player";
@@ -26,7 +26,12 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [selectedStreamId, setSelectedStreamId] = useState<string | undefined>(match.streams[0]?.id);
   const [hasStarted, setHasStarted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showCover, setShowCover] = useState(Boolean(match.streams[0]?.coverImageUrl));
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [isMobileFullscreen, setIsMobileFullscreen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hideControlsTimerRef = useRef<number | null>(null);
 
   const source: StreamSource | undefined = useMemo(
     () => match.streams.find((s) => s.id === selectedStreamId) ?? match.streams[0],
@@ -38,9 +43,111 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   const mediaControlsEnabled = status === "live" && (adapter === "hls" || adapter === "html5");
   const isLive = match.status === "live" || match.status === "halftime";
 
+  const clearHideControlsTimer = useCallback(() => {
+    if (hideControlsTimerRef.current) {
+      window.clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    }
+  }, []);
+
+  const showControlsTemporarily = useCallback(() => {
+    setControlsVisible(true);
+    clearHideControlsTimer();
+
+    if (!isMobileFullscreen || !videoRef.current || videoRef.current.paused) {
+      return;
+    }
+
+    hideControlsTimerRef.current = window.setTimeout(() => {
+      setControlsVisible(false);
+    }, 3000);
+  }, [clearHideControlsTimer, isMobileFullscreen]);
+
   useEffect(() => {
     setHasStarted(false);
-  }, [selectedStreamId]);
+    setIsPlaying(false);
+    setShowCover(Boolean(source?.coverImageUrl));
+    setControlsVisible(true);
+    clearHideControlsTimer();
+  }, [selectedStreamId, source?.coverImageUrl, clearHideControlsTimer]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateFullscreenState = () => {
+      const isFullscreen = document.fullscreenElement === container;
+      const isTouchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function"
+        ? window.matchMedia("(pointer: coarse)").matches
+        : false;
+
+      setIsMobileFullscreen(isFullscreen && isTouchDevice);
+      if (!isFullscreen || !isTouchDevice) {
+        setControlsVisible(true);
+        clearHideControlsTimer();
+        return;
+      }
+
+      if (isPlaying) {
+        showControlsTemporarily();
+      } else {
+        setControlsVisible(true);
+        clearHideControlsTimer();
+      }
+    };
+
+    updateFullscreenState();
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    window.addEventListener("resize", updateFullscreenState);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+      window.removeEventListener("resize", updateFullscreenState);
+      clearHideControlsTimer();
+    };
+  }, [clearHideControlsTimer, isPlaying, showControlsTemporarily]);
+
+  useEffect(() => {
+    const media = videoRef.current;
+    if (!media) return;
+
+    const handlePlaying = () => {
+      setHasStarted(true);
+      setIsPlaying(true);
+      setShowCover(false);
+      showControlsTemporarily();
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+      if (source?.coverImageUrl) {
+        setShowCover(true);
+      }
+      setControlsVisible(true);
+      clearHideControlsTimer();
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      if (source?.coverImageUrl) {
+        setShowCover(true);
+      }
+      setControlsVisible(true);
+      clearHideControlsTimer();
+    };
+
+    media.addEventListener("play", handlePlaying);
+    media.addEventListener("playing", handlePlaying);
+    media.addEventListener("pause", handlePause);
+    media.addEventListener("ended", handleEnded);
+
+    return () => {
+      media.removeEventListener("play", handlePlaying);
+      media.removeEventListener("playing", handlePlaying);
+      media.removeEventListener("pause", handlePause);
+      media.removeEventListener("ended", handleEnded);
+    };
+  }, [clearHideControlsTimer, showControlsTemporarily, source?.coverImageUrl, source?.id]);
 
   function handleSelect(v: string) {
     setSelectedStreamId(v);
@@ -54,19 +161,29 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   }
 
   const hasCoverPoster = Boolean(source?.coverImageUrl);
-  const showCoverOverlay = hasCoverPoster && !hasStarted;
+  const canUseCoverOverlay = adapter === "hls" || adapter === "html5";
+  const showCoverOverlay = hasCoverPoster && showCover && canUseCoverOverlay;
 
   const handlePlayClick = () => {
     setHasStarted(true);
+    setShowCover(false);
     if (videoRef.current) {
-      videoRef.current.play().catch(() => {
-        // Autoplay may be blocked; UI remains usable.
+      void videoRef.current.play().then(() => {
+        setIsPlaying(true);
+        setShowCover(false);
+      }).catch(() => {
+        setIsPlaying(false);
       });
     }
   };
 
   return (
-    <div ref={containerRef} className="surface-card relative min-w-0 overflow-hidden rounded-xl shadow-glow">
+    <div
+      ref={containerRef}
+      className="surface-card relative min-w-0 overflow-hidden rounded-xl shadow-glow"
+      onTouchStart={showControlsTemporarily}
+      onMouseMove={showControlsTemporarily}
+    >
       <div className="relative aspect-[4/3] w-full bg-black sm:aspect-video">
         {renderPlayerBody({ status, adapter, source, retry, onSourceError: handleSourceError, hasStarted, videoRef })}
 
@@ -98,6 +215,8 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
             mediaControlsEnabled={mediaControlsEnabled}
             mediaKey={source?.id}
             isLive={isLive}
+            controlsVisible={controlsVisible}
+            onControlsInteraction={showControlsTemporarily}
             streamSwitcher={match.streams.length > 1 ? (
               <Select value={source?.id} onValueChange={handleSelect}>
                 <SelectTrigger className="h-8 w-[170px] border-white/10 bg-white/10 text-xs text-white hover:bg-white/15" aria-label="Cambiar transmisión">

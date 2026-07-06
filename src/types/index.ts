@@ -77,6 +77,8 @@ export interface StreamSource {
   isExternal: boolean;
   /** True for third-party providers that drop cookies. */
   requiresConsent?: boolean;
+  /** Optional cover/poster image URL for native media players. */
+  coverImageUrl?: string;
   /** Known embed providers; use "custom" or any string for other providers. */
   provider?: "youtube" | "tiktok" | "vimeo" | "custom" | (string & {});
   purpose?: "live" | "highlight";
