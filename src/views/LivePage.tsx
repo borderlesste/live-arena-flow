@@ -10,11 +10,16 @@ import { Button } from "@/components/ui/button";
 import { MessageCircle } from "lucide-react";
 import { useLiveSportsWindow } from "@/hooks/useSportsData";
 import { EmptyState } from "@/components/feedback/States";
+import { filterLiveEvents } from "@/lib/match-filters";
+import { sortEventsByStartTimeAsc } from "@/lib/format";
 
 const LivePage = () => {
   useDocumentMeta({ title: "En vivo", description: "Todas las transmisiones deportivas en directo, en un solo lugar." });
   const { bundle } = useLiveSportsWindow();
-  const live = bundle.matches.filter((match) => ["live", "halftime", "paused"].includes(match.status));
+  const live = useMemo(
+    () => sortEventsByStartTimeAsc(filterLiveEvents(bundle.matches)),
+    [bundle.matches],
+  );
   const competitions = bundle.competitions;
   const getTeam = (id: string) => bundle.teams.find((team) => team.id === id)!;
   const isDesktop = useMediaQuery("(min-width: 1024px)");

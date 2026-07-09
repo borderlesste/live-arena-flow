@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
 import { useReducedMotion } from "@/hooks/useMediaQuery";
 import { trackSponsorClick, trackSponsorImpression } from "@/services/sponsors.service";
@@ -60,7 +61,16 @@ export function SponsorLogo({ sponsor }: { sponsor: Sponsor }) {
 
   const content = (
     <div ref={impressionRef} className="surface-card group flex h-16 min-w-[160px] items-center gap-3 rounded-xl px-4 transition-colors hover:border-primary/40" aria-label={`Patrocinador ${sponsor.name}`}>
-      {sponsor.logoUrl ? <img src={sponsor.logoUrl} alt={sponsor.altText ?? `Logo de ${sponsor.name}`} loading="lazy" className="h-9 w-14 rounded-md object-contain" /> : <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-md font-display text-xs font-bold text-foreground/80 ring-1 ring-white/10 transition-colors group-hover:text-foreground" style={{ background: `linear-gradient(135deg, hsl(${sponsor.color} / 0.35), hsl(${sponsor.color} / 0.1))` }}>{sponsor.monogram}</span>}
+      {sponsor.logoUrl ? (
+        <Image
+          src={sponsor.logoUrl}
+          alt={sponsor.altText ?? `Logo de ${sponsor.name}`}
+          width={56}
+          height={36}
+          unoptimized
+          className="h-9 w-14 rounded-md object-contain"
+        />
+      ) : <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-md font-display text-xs font-bold text-foreground/80 ring-1 ring-white/10 transition-colors group-hover:text-foreground" style={{ background: `linear-gradient(135deg, hsl(${sponsor.color} / 0.35), hsl(${sponsor.color} / 0.1))` }}>{sponsor.monogram}</span>}
       <div className="min-w-0">
         <p className="truncate font-display text-sm font-semibold">{sponsor.name}</p>
         {sponsor.tagline ? <p className="truncate text-[11px] text-muted-foreground">{sponsor.tagline}</p> : null}

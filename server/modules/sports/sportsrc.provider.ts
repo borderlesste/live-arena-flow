@@ -100,15 +100,18 @@ function normalizeTimestamp(value: string | number): string {
 }
 
 function normalizeStatus(status?: string, detail?: string): NormalizedSportsEvent["status"] {
-  const normalized = status?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
-  const normalizedDetail = detail?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
-  if (normalized === "finished") return "finished";
-  if (["inprogress", "live"].includes(normalized)) {
-    return normalizedDetail === "halftime" ? "halftime" : "live";
-  }
-  if (["interrupted", "suspended", "paused"].includes(normalized)) return "paused";
-  if (normalized === "postponed") return "postponed";
-  if (["cancelled", "canceled"].includes(normalized)) return "cancelled";
+  const normalizeToken = (value?: string) => value?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  const normalized = normalizeToken(status);
+  const normalizedDetail = normalizeToken(detail);
+  const tokens = new Set([normalized, normalizedDetail].filter(Boolean));
+
+  if (["halftime", "ht", "half"].some((token) => tokens.has(token))) return "halftime";
+  if (["interrupted", "suspended", "paused", "pause"].some((token) => tokens.has(token))) return "paused";
+  if (["postponed", "delayed"].some((token) => tokens.has(token))) return "postponed";
+  if (["cancelled", "canceled", "abandoned"].some((token) => tokens.has(token))) return "cancelled";
+  if (["finished", "complete", "completed", "final", "ft", "ended", "fulltime"].some((token) => tokens.has(token))) return "finished";
+  if (["inprogress", "live", "inplay", "playing", "1h", "2h", "firsthalf", "secondhalf"].some((token) => tokens.has(token))) return "live";
+  if (["scheduled", "upcoming", "notstarted", "notstart", "notyetstarted", "prematch", "ns"].some((token) => tokens.has(token))) return "scheduled";
   return "scheduled";
 }
 

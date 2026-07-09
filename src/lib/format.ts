@@ -21,6 +21,11 @@ export function formatDayGroup(iso: string): string {
   return format(date, "EEEE d 'de' MMMM", { locale: es });
 }
 
+/** Local calendar date (yyyy-MM-dd) for grouping and filtering matches. */
+export function getMatchLocalDateKey(iso: string): string {
+  return format(new Date(iso), "yyyy-MM-dd");
+}
+
 export function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -67,6 +72,21 @@ export function normalizeMatchDate(match: Match): { timestamp: number | null; da
   };
 }
 
+export function sortMatchesByDateAsc(matches: Match[]): Match[] {
+  return [...matches].sort((a, b) => {
+    const timestampA = getMatchTimestamp(a);
+    const timestampB = getMatchTimestamp(b);
+
+    if (timestampA === null && timestampB === null) return a.id.localeCompare(b.id);
+    if (timestampA === null) return 1;
+    if (timestampB === null) return -1;
+    if (timestampA === timestampB) return a.id.localeCompare(b.id);
+    return timestampA - timestampB;
+  });
+}
+
+export const sortEventsByStartTimeAsc = sortMatchesByDateAsc;
+
 export function sortMatchesByDateDesc(matches: Match[]): Match[] {
   return [...matches].sort((a, b) => {
     const timestampA = getMatchTimestamp(a);
@@ -80,8 +100,14 @@ export function sortMatchesByDateDesc(matches: Match[]): Match[] {
   });
 }
 
-export function groupMatchesByDate(matches: Match[]): Array<{ key: string; label: string; matches: Match[] }> {
-  const sorted = sortMatchesByDateDesc(matches);
+export const sortEventsByStartTimeDesc = sortMatchesByDateDesc;
+
+export function groupMatchesByDate(
+  matches: Match[],
+  options: { order?: "asc" | "desc" } = {},
+): Array<{ key: string; label: string; matches: Match[] }> {
+  const order = options.order ?? "desc";
+  const sorted = order === "asc" ? sortMatchesByDateAsc(matches) : sortMatchesByDateDesc(matches);
   const groups = new Map<string, { key: string; label: string; matches: Match[] }>();
 
   sorted.forEach((match) => {
@@ -99,9 +125,11 @@ export function groupMatchesByDate(matches: Match[]): Array<{ key: string; label
   return Array.from(groups.values()).sort((a, b) => {
     if (a.key === "unconfirmed") return 1;
     if (b.key === "unconfirmed") return -1;
-    return b.key.localeCompare(a.key);
+    return order === "asc" ? a.key.localeCompare(b.key) : b.key.localeCompare(a.key);
   });
 }
+
+export const groupEventsByLocalDate = groupMatchesByDate;
 
 function getCompetitionNextEventTimestamp(competition: Competition): number | null {
   const now = Date.now();

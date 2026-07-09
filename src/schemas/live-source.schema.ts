@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalPersistedImageSchema } from "./image.schema";
+import { optionalPersistedImageSchema } from "./image.schema.js";
 
 const publicPlaybackUrlSchema = z.string().url().refine((value) => {
   const url = new URL(value);

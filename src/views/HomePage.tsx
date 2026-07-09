@@ -23,9 +23,9 @@ import { useSportsWindow } from "@/hooks/useSportsData";
 import { getPrimaryStream } from "@/services/video-sources.service";
 import { useContentData } from "@/hooks/useContentData";
 import { toast } from "sonner";
-import { formatMatchDate } from "@/lib/format";
+import { formatMatchDate, sortEventsByStartTimeAsc, sortEventsByStartTimeDesc } from "@/lib/format";
 import { useFavoriteMatch } from "@/hooks/useFavoriteMatch";
-import { filterMatches } from "@/lib/match-filters";
+import { filterFinishedEvents, filterLiveEvents, filterMatches, filterUpcomingEvents, isLiveMatchStatus } from "@/lib/match-filters";
 import type { NewsArticle } from "@/types";
 
 const HomePage = () => {
@@ -38,9 +38,9 @@ const HomePage = () => {
   const { news: allNews, sponsors: allSponsors, isLoading: isContentLoading } = useContentData();
   const latestNews = useMemo(() => [...allNews].sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt)), [allNews]);
   const [selectedNews, setSelectedNews] = useState<NewsArticle | null>(null);
-  const live = bundle.matches.filter((match) => ["live", "halftime", "paused"].includes(match.status));
-  const upcoming = bundle.matches.filter((match) => match.status === "scheduled").sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
-  const finished = bundle.matches.filter((match) => match.status === "finished").sort((a, b) => +new Date(b.startsAt) - +new Date(a.startsAt));
+  const live = useMemo(() => sortEventsByStartTimeAsc(filterLiveEvents(bundle.matches)), [bundle.matches]);
+  const upcoming = useMemo(() => sortEventsByStartTimeAsc(filterUpcomingEvents(bundle.matches)), [bundle.matches]);
+  const finished = useMemo(() => sortEventsByStartTimeDesc(filterFinishedEvents(bundle.matches)), [bundle.matches]);
   const allCompetitions = bundle.competitions;
   const getTeam = (id: string) => bundle.teams.find((team) => team.id === id)!;
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -49,11 +49,14 @@ const HomePage = () => {
   const mainSponsors = allSponsors.filter((s) => s.tier === "main" || s.tier === "official");
   const partnerSponsors = allSponsors.filter((s) => s.tier === "partner");
 
-  const featured = [...live, ...upcoming, ...finished];
+  const featured = useMemo(() => [...live, ...upcoming, ...finished], [live, upcoming, finished]);
 
   // Prefer the match that contains a source marked as primary. If none exists,
   // fallback to the first live match.
-  const primaryMatchId = useMemo(() => featured.find((m) => (m.streams || []).some((s) => s.isPrimary))?.id, [featured]);
+  const primaryMatchId = useMemo(
+    () => featured.find((m) => (m.streams || []).some((s) => "isPrimary" in s && Boolean(s.isPrimary)))?.id,
+    [featured],
+  );
 
   const [activeId, setActiveId] = useState<string | undefined>(primaryMatchId ?? live[0]?.id);
   const activeMatch = featured.find((match) => match.id === activeId) ?? featured[0];
@@ -213,7 +216,7 @@ const HomePage = () => {
             const teamHome = getTeam(match.homeTeamId);
             const teamAway = getTeam(match.awayTeamId);
             const matchCompetition = allCompetitions.find((item) => item.id === match.competitionId)!;
-            if (["live", "halftime", "paused"].includes(match.status)) return <LiveMatchCard key={match.id} match={match} homeTeam={teamHome} awayTeam={teamAway} competition={matchCompetition} isActive={match.id === activeId} onSelect={setActiveId} />;
+            if (isLiveMatchStatus(match.status)) return <LiveMatchCard key={match.id} match={match} homeTeam={teamHome} awayTeam={teamAway} competition={matchCompetition} isActive={match.id === activeId} onSelect={setActiveId} />;
             if (match.status === "finished") return <ResultCard key={match.id} match={match} homeTeam={teamHome} awayTeam={teamAway} competition={matchCompetition} />;
             return <UpcomingMatchCard key={match.id} match={match} homeTeam={teamHome} awayTeam={teamAway} competition={matchCompetition} />;
           })}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { Plus, Pencil, Trash2, Save, X, RefreshCw, Newspaper, ImageOff } from "lucide-react";
 import { toast } from "sonner";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -199,6 +200,8 @@ const AdminNewsPage = () => {
       </section>
     );
   }
+
+  const previewImageSource = form.image ?? form.coverImageUrl?.trim();
 
   return (
     <section className="space-y-6">
@@ -416,10 +419,13 @@ const AdminNewsPage = () => {
                   </div>
                   {/* Preview thumbnail */}
                   <div className="shrink-0 h-16 w-24 rounded-lg overflow-hidden border border-border/60 bg-surface-2">
-                    {form.image || form.coverImageUrl?.trim() ? (
-                      <img
-                        src={form.image ?? form.coverImageUrl?.trim()}
+                    {previewImageSource ? (
+                      <Image
+                        src={previewImageSource}
                         alt="Vista previa"
+                        width={96}
+                        height={64}
+                        unoptimized
                         className="h-full w-full object-cover"
                         onError={(e) => {
                           (e.currentTarget as HTMLImageElement).style.display = "none";

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BRAND_DEFAULTS } from "./brand-config";
 import { useBrand } from "./brand-context";
@@ -54,15 +55,15 @@ export function BrandLogo({
   const src = showWordmark ? configuredFullSources[variant as Exclude<BrandLogoVariant, "symbol">] : configuredSymbolSources[variant];
 
   return (
-    <img
+    <Image
       src={src}
       alt={decorative ? "" : showWordmark ? settings.platformName : `Símbolo de ${settings.platformName}`}
       aria-hidden={decorative || undefined}
       width={width}
       height={height}
-      loading={priority ? "eager" : "lazy"}
-      fetchPriority={priority ? "high" : "auto"}
-      decoding="async"
+      priority={priority}
+      loading={priority ? undefined : "lazy"}
+      unoptimized
       className={cn("h-auto max-w-full object-contain", className)}
       style={{ width, height: "auto", aspectRatio: `${width} / ${height}` }}
     />

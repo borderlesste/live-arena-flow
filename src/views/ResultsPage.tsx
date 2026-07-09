@@ -6,12 +6,13 @@ import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { Button } from "@/components/ui/button";
 import { groupMatchesByDate } from "@/lib/format";
+import { filterFinishedEvents } from "@/lib/match-filters";
 
 const ResultsPage = () => {
   useDocumentMeta({ title: "Resultados", description: "Consulta los marcadores finales y resúmenes de los partidos." });
   const { bundle, isLoading, isError, refetch } = useSportsWindow();
-  const finished = useMemo(() => bundle.matches.filter((match) => match.status === "finished"), [bundle.matches]);
-  const groupedResults = useMemo(() => groupMatchesByDate(finished), [finished]);
+  const finished = useMemo(() => filterFinishedEvents(bundle.matches), [bundle.matches]);
+  const groupedResults = useMemo(() => groupMatchesByDate(finished, { order: "desc" }), [finished]);
   const getTeam = (id: string) => bundle.teams.find((team) => team.id === id)!;
   const competitions = bundle.competitions;
 

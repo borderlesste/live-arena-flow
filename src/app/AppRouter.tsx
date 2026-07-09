@@ -16,6 +16,7 @@ const MatchesPage = lazy(() => import("@/views/MatchesPage"));
 const CompetitionsPage = lazy(() => import("@/views/CompetitionsPage"));
 const CalendarPage = lazy(() => import("@/views/CalendarPage"));
 const ResultsPage = lazy(() => import("@/views/ResultsPage"));
+const WorldChampionshipPage = lazy(() => import("@/views/WorldChampionshipPage"));
 const MatchDetailsPage = lazy(() => import("@/views/MatchDetailsPage"));
 const ProfilePage = lazy(() => import("@/views/ProfilePage"));
 const NewsPage = lazy(() => import("@/views/NewsPage"));
@@ -72,6 +73,8 @@ export function AppRouter() {
             <Route path="/competitions" element={<CompetitionsPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/results" element={<ResultsPage />} />
+            <Route path="/mundial" element={<WorldChampionshipPage />} />
+            <Route path="/world-championship" element={<WorldChampionshipPage />} />
             <Route path="/match/:id" element={<MatchDetailsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/noticias" element={<NewsPage />} />

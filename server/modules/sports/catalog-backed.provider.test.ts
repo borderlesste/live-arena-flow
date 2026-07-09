@@ -34,11 +34,12 @@ function setup() {
 }
 
 describe("CatalogBackedSportsProvider", () => {
-  it("persists provider events before reading the canonical catalog", async () => {
-    const { provider, catalog } = setup();
+  it("uses the persisted catalog first when canonical data is available", async () => {
+    const { provider, upstream, catalog } = setup();
     await expect(provider.eventsByDate("2026-07-03")).resolves.toEqual([event]);
-    expect(catalog.syncProviderEvents).toHaveBeenCalledWith("sportsrc", [event]);
     expect(catalog.eventsByDate).toHaveBeenCalledWith("2026-07-03");
+    expect(upstream.eventsByDate).not.toHaveBeenCalled();
+    expect(catalog.syncProviderEvents).not.toHaveBeenCalled();
   });
 
   it("reads local events without calling the external provider", async () => {

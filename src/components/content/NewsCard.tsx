@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { formatRelativeShort } from "@/lib/format";
 import { ArrowRight, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,12 @@ export function NewsCard({ article, onRead }: Props) {
       {/* Cover image / gradient fallback */}
       <div className="relative h-40 w-full overflow-hidden bg-surface-2">
         {imageSource ? (
-          <img
+          <Image
             src={imageSource}
             alt={article.title}
-            loading="lazy"
+            fill
+            unoptimized
+            sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             onError={(e) => {
               // Hide broken image — gradient fallback shows through
@@ -80,10 +83,12 @@ export function NewsThumb({ article, className }: { article: NewsArticle; classN
       }
     >
       {imageSource ? (
-        <img
+        <Image
           src={imageSource}
           alt=""
-          loading="lazy"
+          fill
+          unoptimized
+          sizes="96px"
           className="h-full w-full object-cover"
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).style.display = "none";

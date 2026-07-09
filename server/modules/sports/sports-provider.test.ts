@@ -206,10 +206,23 @@ describe("SportSRC V2 provider", () => {
 
   it("maps every documented lifecycle state", () => {
     expect(normalizeSportSrcStatus("inprogress", "1st half")).toBe("live");
+    expect(normalizeSportSrcStatus("LIVE", undefined)).toBe("live");
+    expect(normalizeSportSrcStatus("IN_PLAY", undefined)).toBe("live");
+    expect(normalizeSportSrcStatus("playing", undefined)).toBe("live");
+    expect(normalizeSportSrcStatus("1H", undefined)).toBe("live");
+    expect(normalizeSportSrcStatus("2H", undefined)).toBe("live");
     expect(normalizeSportSrcStatus("inprogress", "Halftime")).toBe("halftime");
     expect(normalizeSportSrcStatus("interrupted", "Interrupted")).toBe("paused");
     expect(normalizeSportSrcStatus("postponed", "Postponed")).toBe("postponed");
     expect(normalizeSportSrcStatus("finished", "Ended")).toBe("finished");
+    expect(normalizeSportSrcStatus("FT", undefined)).toBe("finished");
+    expect(normalizeSportSrcStatus("completed", undefined)).toBe("finished");
+    expect(normalizeSportSrcStatus("final", undefined)).toBe("finished");
+    expect(normalizeSportSrcStatus("cancelled", undefined)).toBe("cancelled");
+    expect(normalizeSportSrcStatus("canceled", undefined)).toBe("cancelled");
+    expect(normalizeSportSrcStatus("scheduled", undefined)).toBe("scheduled");
+    expect(normalizeSportSrcStatus("upcoming", undefined)).toBe("scheduled");
+    expect(normalizeSportSrcStatus("not_started", undefined)).toBe("scheduled");
     expect(normalizeSportSrcStatus("notstarted", "Upcoming")).toBe("scheduled");
   });
 });

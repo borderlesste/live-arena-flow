@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { filterMatches } from "./match-filters";
+import {
+  filterFinishedEvents,
+  filterLiveEvents,
+  filterMatches,
+  filterUpcomingEvents,
+  isLiveMatchStatus,
+} from "./match-filters";
 import type { Match, MatchStatus } from "@/types";
 
 function match(id: string, status: MatchStatus): Match {
@@ -25,9 +31,16 @@ describe("match filters", () => {
 
   it("treats paused matches as live", () => {
     expect(filterMatches(matches, "live").map((m) => m.id)).toEqual(["live", "paused"]);
+    expect(filterLiveEvents(matches).map((m) => m.id)).toEqual(["live", "paused"]);
+    expect(isLiveMatchStatus("halftime")).toBe(true);
   });
 
   it("football filter returns all football matches", () => {
     expect(filterMatches(matches, "football")).toHaveLength(4);
+  });
+
+  it("exposes shared route-specific filters", () => {
+    expect(filterUpcomingEvents(matches).map((m) => m.id)).toEqual(["upcoming"]);
+    expect(filterFinishedEvents(matches).map((m) => m.id)).toEqual(["finished"]);
   });
 });

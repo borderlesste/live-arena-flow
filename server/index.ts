@@ -34,6 +34,7 @@ import {
   getCloudflareWebAnalyticsConfig,
   periodRange,
   summarizeWebAnalytics,
+  syncCloudflareWebAnalytics,
   type StoredWebAnalyticsRow,
   type WebAnalyticsPeriod,
 } from "./modules/analytics/web-analytics.js";

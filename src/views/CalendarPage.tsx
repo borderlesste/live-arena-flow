@@ -10,10 +10,29 @@ import { es } from "date-fns/locale";
 import { useSportsDate, useSportsWindow } from "@/hooks/useSportsData";
 import { MatchFilters, type MatchFilter } from "@/components/matches/MatchFilters";
 import { UpcomingMatchCard } from "@/components/matches/UpcomingMatchCard";
+import { LiveMatchCard } from "@/components/matches/LiveMatchCard";
+import { ResultCard } from "@/components/matches/ResultCard";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
-import { formatDayGroup } from "@/lib/format";
+import { getMatchLocalDateKey, groupMatchesByDate } from "@/lib/format";
+import { isFinishedMatchStatus, isLiveMatchStatus, isUpcomingMatchStatus } from "@/lib/match-filters";
 import { cn } from "@/lib/utils";
+import type { Competition, Match, Team } from "@/types";
+
+function MatchCardForStatus({ match, homeTeam, awayTeam, competition }: {
+  match: Match;
+  homeTeam: Team;
+  awayTeam: Team;
+  competition: Competition;
+}) {
+  if (isLiveMatchStatus(match.status)) {
+    return <LiveMatchCard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />;
+  }
+  if (match.status === "finished") {
+    return <ResultCard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />;
+  }
+  return <UpcomingMatchCard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />;
+}
 
 const CalendarPage = () => {
   useDocumentMeta({ title: "Calendario", description: "Próximos partidos por fecha, competición y estado." });
@@ -30,30 +49,19 @@ const CalendarPage = () => {
 
   const filtered = useMemo(() => {
     return matches.filter((m) => {
-      if (statusFilter === "live" && !["live", "halftime", "paused"].includes(m.status)) return false;
-      if (statusFilter === "upcoming" && m.status !== "scheduled") return false;
-      if (statusFilter === "finished" && m.status !== "finished") return false;
+      if (statusFilter === "live" && !isLiveMatchStatus(m.status)) return false;
+      if (statusFilter === "upcoming" && !isUpcomingMatchStatus(m.status)) return false;
+      if (statusFilter === "finished" && !isFinishedMatchStatus(m.status)) return false;
       if (comp !== "all" && m.competitionId !== comp) return false;
-      if (date) {
-        const sel = format(date, "yyyy-MM-dd");
-        const d = new Date(m.startsAt).toISOString().slice(0, 10);
-        if (d !== sel) return false;
-      }
+      if (dateKey && getMatchLocalDateKey(m.startsAt) !== dateKey) return false;
       return true;
-    }).sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
-  }, [matches, statusFilter, comp, date]);
-
-  // group by day
-  const groups = useMemo(() => {
-    const map = new Map<string, typeof filtered>();
-    filtered.forEach((m) => {
-      const key = new Date(m.startsAt).toISOString().slice(0, 10);
-      const arr = map.get(key) ?? [];
-      arr.push(m);
-      map.set(key, arr);
     });
-    return Array.from(map.entries());
-  }, [filtered]);
+  }, [matches, statusFilter, comp, dateKey]);
+
+  const groups = useMemo(
+    () => groupMatchesByDate(filtered, { order: statusFilter === "finished" ? "desc" : "asc" }),
+    [filtered, statusFilter],
+  );
 
   return (
     <section className="container mx-auto space-y-6 px-4 py-6 md:px-6">
@@ -93,12 +101,12 @@ const CalendarPage = () => {
         <EmptyState title="Sin partidos programados" description="Cambia los filtros para ver más eventos." />
       ) : (
         <div className="space-y-6">
-          {groups.map(([day, list]) => (
-            <div key={day}>
-              <h2 className="mb-3 font-display text-lg font-semibold capitalize">{formatDayGroup(list[0].startsAt)}</h2>
+          {groups.map((group) => (
+            <div key={group.key}>
+              <h2 className="mb-3 font-display text-lg font-semibold capitalize">{group.label}</h2>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {list.map((m) => (
-                  <UpcomingMatchCard
+                {group.matches.map((m) => (
+                  <MatchCardForStatus
                     key={m.id}
                     match={m}
                     homeTeam={getTeam(m.homeTeamId)}

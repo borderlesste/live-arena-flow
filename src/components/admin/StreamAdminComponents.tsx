@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import Image from "next/image";
 import { formatDayGroup } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -287,7 +288,9 @@ export function SourceGeneralForm({
           </div>
           {coverImageUrl ? (
             <div className="mt-2 w-full overflow-hidden rounded-md border border-border/40 bg-surface-2">
-              <img src={coverImageUrl} alt="Vista previa portada" className="h-28 w-full object-cover" />
+              <div className="relative h-28 w-full">
+                <Image src={coverImageUrl} alt="Vista previa portada" fill unoptimized sizes="430px" className="object-cover" />
+              </div>
             </div>
           ) : null}
         </div>
@@ -926,7 +929,14 @@ export function ConfiguredSourcesList({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 pr-6 flex items-start gap-3">
                       {source.coverImageUrl ? (
-                        <img src={source.coverImageUrl} alt="Portada" className="h-12 w-20 flex-shrink-0 rounded-md object-cover" />
+                        <Image
+                          src={source.coverImageUrl}
+                          alt="Portada"
+                          width={80}
+                          height={48}
+                          unoptimized
+                          className="h-12 w-20 flex-shrink-0 rounded-md object-cover"
+                        />
                       ) : null}
                       <div className="min-w-0">
                         <p className="font-display font-bold text-base truncate leading-snug group-hover:text-primary transition-colors">

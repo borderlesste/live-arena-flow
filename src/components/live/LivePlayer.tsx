@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { HlsPlayer } from "./HlsPlayer";
 import { EmbedPlayer } from "./EmbedPlayer";
 import { Html5Player } from "./Html5Player";
@@ -189,7 +190,14 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
 
         {showCoverOverlay ? (
           <div className="absolute inset-0 z-15 flex items-center justify-center bg-black/60">
-            <img src={source?.coverImageUrl} alt={`Portada de ${source?.title}`} className="absolute inset-0 h-full w-full object-cover" />
+            <Image
+              src={source?.coverImageUrl ?? ""}
+              alt={`Portada de ${source?.title}`}
+              fill
+              unoptimized
+              sizes="100vw"
+              className="object-cover"
+            />
             <div className="absolute inset-0 bg-black/20" />
             <button
               type="button"

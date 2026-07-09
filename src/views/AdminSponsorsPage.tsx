@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type DragEvent, type ReactNode } from "react";
+import Image from "next/image";
 import { BarChart3, Copy, GripVertical, ImageIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -167,7 +168,12 @@ export default function AdminSponsorsPage() {
               <div className="space-y-2">
                 <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void loadImage(event.target.files?.[0])} />
                 <p className="text-xs text-muted-foreground">JPG, PNG o WebP. Máximo 512 KB.</p>
-                {form.image ? <div className="flex items-center gap-3"><img src={form.image} alt="Vista previa" className="h-16 w-28 rounded-md bg-white/5 object-contain" /><Button type="button" size="sm" variant="outline" onClick={() => update("image", undefined)}>Quitar</Button></div> : null}
+                {form.image ? (
+                  <div className="flex items-center gap-3">
+                    <Image src={form.image} alt="Vista previa" width={112} height={64} unoptimized className="h-16 w-28 rounded-md bg-white/5 object-contain" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => update("image", undefined)}>Quitar</Button>
+                  </div>
+                ) : null}
               </div>
             </Field>
             <Field label="Logo HTTPS alternativo"><Input type="url" value={form.logoUrl ?? ""} onChange={(event) => update("logoUrl", optionalText(event.target.value))} placeholder="https://cdn.example.com/logo.svg" /></Field>
@@ -200,7 +206,16 @@ export default function AdminSponsorsPage() {
             return <Card key={sponsor.id} draggable onDragStart={() => setDraggedId(sponsor.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => void drop(event, sponsor.id)} className="surface-card cursor-grab">
               <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
                 <GripVertical className="hidden h-5 w-5 text-muted-foreground lg:block" aria-label="Arrastrar para reordenar" />
-                {sponsor.image || sponsor.logoUrl ? <img src={sponsor.image ?? sponsor.logoUrl} alt={sponsor.altText} className="h-14 w-24 rounded-md bg-white/5 object-contain" /> : <div className="grid h-14 w-24 place-items-center rounded-md bg-white/5 text-xs text-muted-foreground">Sin imagen</div>}
+                {sponsor.image || sponsor.logoUrl ? (
+                  <Image
+                    src={sponsor.image ?? sponsor.logoUrl ?? ""}
+                    alt={sponsor.altText ?? sponsor.name}
+                    width={96}
+                    height={56}
+                    unoptimized
+                    className="h-14 w-24 rounded-md bg-white/5 object-contain"
+                  />
+                ) : <div className="grid h-14 w-24 place-items-center rounded-md bg-white/5 text-xs text-muted-foreground">Sin imagen</div>}
                 <div className="min-w-0 flex-1"><div className="flex flex-wrap gap-2"><p className="font-semibold">{sponsor.name}</p><Badge>{sponsor.status}</Badge><Badge variant="outline">{sponsor.type}</Badge></div><p className="truncate text-xs text-muted-foreground">{sponsor.campaign ?? "Sin campaña"} · prioridad {sponsor.priority}</p><div className="mt-2 flex gap-3 text-xs text-muted-foreground"><span>{metric.impressions} impresiones</span><span>{metric.clicks} clics</span><span>{metric.ctr.toFixed(2)}% CTR</span></div></div>
                 <div className="flex flex-wrap gap-1"><Button size="sm" variant="outline" onClick={() => void changeStatus(sponsor, sponsor.status === "active" ? "paused" : "active")}>{sponsor.status === "active" ? "Pausar" : "Activar"}</Button><Button size="icon" variant="ghost" aria-label="Editar" onClick={() => { setForm(sponsor); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" aria-label="Duplicar" onClick={() => void duplicate(sponsor)}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" aria-label="Eliminar" className="text-destructive" onClick={() => setDeleteId(sponsor.id)}><Trash2 className="h-4 w-4" /></Button></div>
               </CardContent>

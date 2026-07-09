@@ -1,13 +1,19 @@
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 import { ListFilter } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SPORT_LABEL } from "@/lib/sports";
 import { formatMatchDate } from "@/lib/format";
+import { isWorldChampionshipCompetition } from "@/lib/world-championship";
 import type { Competition } from "@/types";
 
 interface Props { competition: Competition }
 
 export function CompetitionCard({ competition }: Props) {
+  const matchesLink = isWorldChampionshipCompetition(competition)
+    ? "/mundial"
+    : `/matches?sport=${competition.sport}`;
+
   return (
     <article className="surface-card flex flex-col gap-3 rounded-xl p-4">
       <div className="flex items-center gap-3">
@@ -17,7 +23,18 @@ export function CompetitionCard({ competition }: Props) {
           style={{ background: `linear-gradient(135deg, hsl(${competition.color} / 0.45), hsl(${competition.color} / 0.1))` }}
         >
           <span>{competition.monogram}</span>
-          {competition.badgeUrl ? <img src={competition.badgeUrl} alt="" className="absolute h-9 w-9 object-contain" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
+          {competition.badgeUrl ? (
+            <Image
+              src={competition.badgeUrl}
+              alt=""
+              width={36}
+              height={36}
+              unoptimized
+              className="absolute h-9 w-9 object-contain"
+              referrerPolicy="no-referrer"
+              onError={(event) => { event.currentTarget.hidden = true; }}
+            />
+          ) : null}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-base font-semibold">{competition.name}</p>
@@ -35,7 +52,7 @@ export function CompetitionCard({ competition }: Props) {
         </div>
       </dl>
       <Button asChild size="sm" variant="outline">
-        <Link to={`/matches?sport=${competition.sport}`}><ListFilter className="mr-1.5 h-4 w-4" /> Ver partidos</Link>
+        <Link to={matchesLink}><ListFilter className="mr-1.5 h-4 w-4" /> Ver partidos</Link>
       </Button>
     </article>
   );

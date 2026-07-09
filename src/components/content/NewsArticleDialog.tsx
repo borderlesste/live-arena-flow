@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { CalendarDays } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { NewsArticle } from "@/types";
@@ -15,7 +16,11 @@ export function NewsArticleDialog({ article, onOpenChange }: NewsArticleDialogPr
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0">
         {article ? (
           <article>
-            {imageSource ? <img src={imageSource} alt="" className="h-56 w-full object-cover sm:h-72" /> : null}
+            {imageSource ? (
+              <div className="relative h-56 w-full sm:h-72">
+                <Image src={imageSource} alt="" fill unoptimized sizes="(min-width: 640px) 768px, 100vw" className="object-cover" />
+              </div>
+            ) : null}
             <div className="space-y-5 p-6 sm:p-8">
               <DialogHeader className="space-y-3 text-left">
                 <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">

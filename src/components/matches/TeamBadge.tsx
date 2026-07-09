@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { Team } from "@/types";
 
@@ -30,11 +31,13 @@ export function TeamBadge({ team, size = "md", className }: TeamBadgeProps) {
     >
       <span>{team.monogram}</span>
       {team.badgeUrl ? (
-        <img
+        <Image
           src={team.badgeUrl}
           alt=""
+          width={56}
+          height={56}
+          unoptimized
           className="absolute h-[72%] w-[72%] object-contain"
-          loading="lazy"
           referrerPolicy="no-referrer"
           onError={(event) => { event.currentTarget.hidden = true; }}
         />

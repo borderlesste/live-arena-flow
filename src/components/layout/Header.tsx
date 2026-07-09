@@ -14,6 +14,7 @@ const NAV = [
   { to: "/live", label: "En vivo" },
   { to: "/matches", label: "Partidos" },
   { to: "/competitions", label: "Competiciones" },
+  { to: "/mundial", label: "Mundial" },
   { to: "/calendar", label: "Calendario" },
   { to: "/results", label: "Resultados" },
 ];

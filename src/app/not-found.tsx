@@ -1,10 +1,11 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function NotFound() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4 text-center text-foreground">
       <div className="surface-card max-w-lg rounded-xl p-8">
-        <img
+        <Image
           src="/brand/symbols/symbol-white.png"
           alt="Símbolo de Luis Romero Fútbol"
           width={96}
