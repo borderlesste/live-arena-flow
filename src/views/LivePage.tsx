@@ -9,30 +9,41 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Button } from "@/components/ui/button";
 import { MessageCircle } from "lucide-react";
 import { useLiveSportsWindow } from "@/hooks/useSportsData";
-import { EmptyState } from "@/components/feedback/States";
+import { EmptyState, ErrorState } from "@/components/feedback/States";
+import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { filterLiveEvents } from "@/lib/match-filters";
 import { sortEventsByStartTimeAsc } from "@/lib/format";
 
 const LivePage = () => {
   useDocumentMeta({ title: "En vivo", description: "Todas las transmisiones deportivas en directo, en un solo lugar." });
-  const { bundle } = useLiveSportsWindow();
+  const { bundle, isLoading, isError, refetch } = useLiveSportsWindow();
   const live = useMemo(
     () => sortEventsByStartTimeAsc(filterLiveEvents(bundle.matches)),
     [bundle.matches],
   );
   const competitions = bundle.competitions;
-  const getTeam = (id: string) => bundle.teams.find((team) => team.id === id)!;
+  const teamById = useMemo(() => new Map(bundle.teams.map((team) => [team.id, team])), [bundle.teams]);
+  const competitionById = useMemo(() => new Map(competitions.map((competition) => [competition.id, competition])), [competitions]);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const [activeId, setActiveId] = useState(live[0]?.id);
+  const [activeId, setActiveId] = useState<string>();
   const [filter, setFilter] = useState<MatchFilter>("live");
-  const active = useMemo(() => live.find((m) => m.id === activeId) ?? live[0], [activeId, live]);
+  const primaryMatch = live.find((match) => match.streams.some((stream) => stream.isPrimary));
+  const active = live.find((match) => match.id === activeId) ?? primaryMatch ?? live[0];
+
+  if (isLoading) {
+    return <section className="container mx-auto px-4 py-12"><SkeletonLoader className="h-72 w-full" /></section>;
+  }
+
+  if (isError && !active) {
+    return <section className="container mx-auto px-4 py-12"><ErrorState title="No se pudieron cargar las transmisiones" description="El catálogo y el proveedor deportivo no respondieron correctamente." action={<Button onClick={() => void refetch()}>Reintentar</Button>} /></section>;
+  }
 
   if (!active) {
     return <section className="container mx-auto px-4 py-12"><EmptyState title="Sin transmisiones activas" description="Vuelve más tarde." /></section>;
   }
-  const home = getTeam(active.homeTeamId);
-  const away = getTeam(active.awayTeamId);
-  const comp = competitions.find((c) => c.id === active.competitionId)!;
+  const home = teamById.get(active.homeTeamId)!;
+  const away = teamById.get(active.awayTeamId)!;
+  const comp = competitionById.get(active.competitionId)!;
 
   const filtered = filter === "all" || filter === "live" ? live : live.filter((m) => m.sport === filter);
 
@@ -64,9 +75,9 @@ const LivePage = () => {
           <LiveMatchCard
             key={m.id}
             match={m}
-            homeTeam={getTeam(m.homeTeamId)}
-            awayTeam={getTeam(m.awayTeamId)}
-            competition={competitions.find((c) => c.id === m.competitionId)!}
+            homeTeam={teamById.get(m.homeTeamId)!}
+            awayTeam={teamById.get(m.awayTeamId)!}
+            competition={competitionById.get(m.competitionId)!}
             isActive={m.id === active.id}
             onSelect={setActiveId}
           />

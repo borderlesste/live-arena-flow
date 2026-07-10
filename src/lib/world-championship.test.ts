@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyWorldChampionshipPhase,
   filterWorldChampionshipMatches,
+  groupWorldChampionshipMatchesByPhase,
   isWorldChampionshipCompetition,
   splitWorldChampionshipTimeline,
   WORLD_CHAMPIONSHIP_NAME,
@@ -31,6 +33,7 @@ const worldCompetition: Competition = {
   monogram: "WC",
   color: "10 70% 50%",
   activeMatches: 0,
+  totalMatches: 0,
 };
 
 const leagueCompetition: Competition = {
@@ -41,6 +44,7 @@ const leagueCompetition: Competition = {
   monogram: "PL",
   color: "220 70% 50%",
   activeMatches: 0,
+  totalMatches: 0,
 };
 
 describe("isWorldChampionshipCompetition", () => {
@@ -65,6 +69,29 @@ describe("filterWorldChampionshipMatches", () => {
     ];
 
     expect(filterWorldChampionshipMatches(matches, [worldCompetition, leagueCompetition]).map((match) => match.id)).toEqual(["wc-1"]);
+  });
+});
+
+describe("World Championship phases", () => {
+  it("classifies provider phase labels and keeps the tournament order", () => {
+    const matches = [
+      { ...createMatch("final", "2026-07-19T19:00:00.000Z", "scheduled"), phase: "Final" },
+      { ...createMatch("group", "2026-06-11T19:00:00.000Z", "finished"), phase: "Group Stage", group: "Group A" },
+      { ...createMatch("semi", "2026-07-14T19:00:00.000Z", "scheduled"), phase: "Semi-finals" },
+      { ...createMatch("r32", "2026-06-28T19:00:00.000Z", "scheduled"), phase: "Round of 32" },
+    ];
+
+    expect(classifyWorldChampionshipPhase(matches[1])).toBe("group-stage");
+    expect(groupWorldChampionshipMatchesByPhase(matches).map((phase) => phase.key)).toEqual([
+      "group-stage",
+      "round-of-32",
+      "semi-finals",
+      "final",
+    ]);
+  });
+
+  it("does not infer a phase when the provider did not supply one", () => {
+    expect(classifyWorldChampionshipPhase(createMatch("unknown", "2026-07-01T19:00:00.000Z", "scheduled"))).toBe("other");
   });
 });
 

@@ -36,6 +36,8 @@ const matchSchema = z.object({
   status: optionalStringSchema,
   status_detail: optionalStringSchema,
   round: z.union([z.string(), z.number()]).nullish(),
+  stage: optionalStringSchema,
+  group: optionalStringSchema,
   has_highlights: z.boolean().optional(),
   teams: z.object({ home: teamSchema, away: teamSchema }),
   score: z.object({
@@ -55,7 +57,7 @@ const matchGroupSchema = z.object({
 
 const listEnvelopeSchema = z.object({
   success: z.literal(true),
-  data: z.array(matchGroupSchema),
+  data: z.array(matchGroupSchema).nullish().transform((value) => value ?? []),
 }).passthrough();
 
 const detailEnvelopeSchema = z.object({
@@ -112,7 +114,7 @@ function normalizeStatus(status?: string, detail?: string): NormalizedSportsEven
   if (["finished", "complete", "completed", "final", "ft", "ended", "fulltime"].some((token) => tokens.has(token))) return "finished";
   if (["inprogress", "live", "inplay", "playing", "1h", "2h", "firsthalf", "secondhalf"].some((token) => tokens.has(token))) return "live";
   if (["scheduled", "upcoming", "notstarted", "notstart", "notyetstarted", "prematch", "ns"].some((token) => tokens.has(token))) return "scheduled";
-  return "scheduled";
+  return "unknown";
 }
 
 function venueName(value: unknown): string | undefined {
@@ -133,6 +135,7 @@ function normalize(match: SportSrcMatch, groupedLeague?: SportSrcLeague, venue?:
   const homeKey = `${match.teams.home.name}-${match.teams.home.code ?? ""}`;
   const awayKey = `${match.teams.away.name}-${match.teams.away.code ?? ""}`;
   const leagueKey = `${league.country ?? "international"}-${league.name}`;
+  const round = match.round === null || match.round === undefined ? undefined : String(match.round).trim() || undefined;
 
   return normalizedSportsEventSchema.parse({
     id: `sportsrc-${match.id}`,
@@ -159,6 +162,8 @@ function normalize(match: SportSrcMatch, groupedLeague?: SportSrcLeague, venue?:
     status: normalizeStatus(match.status, match.status_detail),
     statusLabel: match.status_detail ?? match.status,
     venue: venueName(venue),
+    phase: match.stage ?? round,
+    group: match.group,
   });
 }
 

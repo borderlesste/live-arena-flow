@@ -96,6 +96,9 @@ function eventFromRow(row: CatalogMatchRow): NormalizedSportsEvent | undefined {
     status: row.status,
     statusLabel: typeof raw.statusLabel === "string" ? raw.statusLabel : undefined,
     venue: row.venue ?? undefined,
+    city: typeof raw.city === "string" ? raw.city : undefined,
+    phase: typeof raw.phase === "string" ? raw.phase : undefined,
+    group: typeof raw.group === "string" ? raw.group : undefined,
     highlightUrl: typeof raw.highlightUrl === "string" ? raw.highlightUrl : undefined,
   });
 }
@@ -182,7 +185,13 @@ export class SupabaseSportsCatalog implements SportsCatalog {
       venue: event.venue ?? event.city ?? null,
       home_score: event.homeScore,
       away_score: event.awayScore,
-      raw_payload: { statusLabel: event.statusLabel, highlightUrl: event.highlightUrl },
+      raw_payload: {
+        statusLabel: event.statusLabel,
+        highlightUrl: event.highlightUrl,
+        city: event.city,
+        phase: event.phase,
+        group: event.group,
+      },
       deleted_at: null,
       updated_at: updatedAt,
     }));

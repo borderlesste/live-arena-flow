@@ -20,10 +20,6 @@ export class CatalogBackedSportsProvider implements SportsProvider {
       persistedEvents = undefined;
     }
 
-    if (persistedEvents && persistedEvents.length > 0) {
-      return persistedEvents;
-    }
-
     let upstreamEvents: NormalizedSportsEvent[] | undefined;
     let upstreamError: unknown;
     try {
@@ -31,19 +27,21 @@ export class CatalogBackedSportsProvider implements SportsProvider {
       if (upstreamEvents.length > 0) {
         try {
           await this.catalog.syncProviderEvents(this.upstream.name, upstreamEvents);
+          const refreshedEvents = await this.catalog.eventsByDate(date);
+          if (refreshedEvents.length > 0) return refreshedEvents;
         } catch {
           console.warn("[sports-catalog] provider sync failed; using persisted catalog", { code: "SPORTS_CATALOG_SYNC_FALLBACK" });
         }
       }
     } catch (error) {
       upstreamError = error;
-      if (persistedEvents && persistedEvents.length === 0) {
-        return persistedEvents;
-      }
     }
 
-    if (upstreamEvents) return upstreamEvents;
-    if (persistedEvents) return persistedEvents;
+    if (upstreamEvents) {
+      return [...new Map([...(persistedEvents ?? []), ...upstreamEvents].map((event) => [event.id, event])).values()]
+        .sort((left, right) => left.startsAt.localeCompare(right.startsAt) || left.id.localeCompare(right.id));
+    }
+    if (persistedEvents !== undefined) return persistedEvents;
     throw upstreamError ?? new Error("SPORTS_CATALOG_MISSING_DATA");
   }
 

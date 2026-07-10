@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useSportsWindow } from "@/hooks/useSportsData";
 import { findMatchSearchResults } from "@/lib/match-search";
+import { SPORTS_DISPLAY_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface HeaderSearchProps {
@@ -15,6 +16,7 @@ interface HeaderSearchProps {
 }
 
 const dateFormatter = new Intl.DateTimeFormat("es", {
+  timeZone: SPORTS_DISPLAY_TIME_ZONE,
   day: "2-digit",
   month: "short",
   hour: "2-digit",

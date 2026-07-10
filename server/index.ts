@@ -7,6 +7,7 @@ import { readStore, updateStore, type StoreData, type StoredUser, type StoredVid
 import { createSportsProvider, sportsProviderDiagnostics } from "./modules/sports/index.js";
 import { CatalogBackedSportsProvider } from "./modules/sports/catalog-backed.provider.js";
 import { SupabaseSportsCatalog } from "./modules/sports/sports-catalog.js";
+import { eventsByDateRange } from "./modules/sports/sports-provider.js";
 import { hasSupabaseRole } from "./modules/auth/authorization.js";
 import { selectSupabasePublicKey } from "./modules/auth/supabase-key.js";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
@@ -1195,7 +1196,15 @@ const server = createServer(async (request, response) => {
       return json(response, 200, { externalMatchId, favorite: Boolean(stored), createdAt: stored?.createdAt });
     }
 
-    if (request.method === "GET" && url.pathname === "/api/sports/events") return json(response, 200, { provider: sportsProvider.name, events: await sportsProvider.eventsByDate(url.searchParams.get("date") || new Date().toISOString().slice(0, 10)) });
+    if (request.method === "GET" && url.pathname === "/api/sports/events") {
+      const start = url.searchParams.get("start");
+      const end = url.searchParams.get("end");
+      if (Boolean(start) !== Boolean(end)) return json(response, 400, { error: "El rango requiere start y end" });
+      const events = start && end
+        ? await eventsByDateRange(sportsProvider, start, end)
+        : await sportsProvider.eventsByDate(url.searchParams.get("date") || new Date().toISOString().slice(0, 10));
+      return json(response, 200, { provider: sportsProvider.name, events });
+    }
     if (request.method === "GET" && url.pathname === "/api/sports/live") return json(response, 200, { provider: sportsProvider.name, events: await sportsProvider.liveEvents() });
     const eventMatch = url.pathname.match(/^\/api\/sports\/events\/([^/]+)$/);
     if (request.method === "GET" && eventMatch) return json(response, 200, { provider: sportsProvider.name, events: [await sportsProvider.eventById(eventMatch[1])].filter(Boolean) });
@@ -2289,6 +2298,9 @@ const server = createServer(async (request, response) => {
     }
     if (error instanceof z.ZodError) {
       return json(response, 400, { error: "Datos inválidos", issues: error.issues });
+    }
+    if (error instanceof Error && ["INVALID_SPORTS_DATE_RANGE", "SPORTS_DATE_RANGE_TOO_LARGE"].includes(error.message)) {
+      return json(response, 400, { error: "Rango de fechas deportivas inválido" });
     }
     if (error instanceof Error && error.message.startsWith("La tabla sponsors")) return json(response, 500, { error: error.message });
     console.error("Unhandled request error");

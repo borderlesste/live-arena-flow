@@ -14,5 +14,6 @@ async function requestEvents(endpoint: string, params: Record<string, string> = 
 }
 
 export function getEventsByDate(date: string) { return requestEvents("sports/events", { date }); }
+export function getEventsByRange(start: string, end: string) { return requestEvents("sports/events", { start, end }); }
 export function getLiveEvents() { return requestEvents("sports/live"); }
 export function getEventById(id: string) { return requestEvents(`sports/events/${encodeURIComponent(id)}`, {}).then((events) => events[0]); }

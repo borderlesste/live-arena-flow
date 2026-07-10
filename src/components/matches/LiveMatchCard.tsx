@@ -6,6 +6,7 @@ import { compactNumber, formatMatchDate } from "@/lib/format";
 import { SPORT_LABEL } from "@/lib/sports";
 import { Users, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { matchStatusLabel } from "@/lib/match-filters";
 import type { Match, Team, Competition } from "@/types";
 
 interface LiveMatchCardProps {
@@ -29,7 +30,7 @@ export function LiveMatchCard({ match, homeTeam, awayTeam, competition, isActive
     >
       <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
         <span className="flex items-center gap-2">
-          {live ? <LiveBadge /> : <span className="rounded bg-surface-2 px-1.5 py-0.5">{statusLabel(match.status)}</span>}
+          {live ? <LiveBadge /> : <span className="rounded bg-surface-2 px-1.5 py-0.5">{matchStatusLabel(match.status)}</span>}
           <span>{SPORT_LABEL[match.sport]}</span>
         </span>
         <span className="truncate">{competition.name}</span>
@@ -77,16 +78,4 @@ export function LiveMatchCard({ match, homeTeam, awayTeam, competition, isActive
       </div>
     </article>
   );
-}
-
-function statusLabel(s: Match["status"]): string {
-  switch (s) {
-    case "scheduled": return "Próximo";
-    case "finished": return "Final";
-    case "halftime": return "Descanso";
-    case "paused": return "Pausado";
-    case "postponed": return "Aplazado";
-    case "cancelled": return "Cancelado";
-    case "live": return "En vivo";
-  }
 }

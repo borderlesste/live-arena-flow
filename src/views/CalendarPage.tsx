@@ -7,32 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useSportsDate, useSportsWindow } from "@/hooks/useSportsData";
+import { useSportsLocalDate, useSportsWindow } from "@/hooks/useSportsData";
 import { MatchFilters, type MatchFilter } from "@/components/matches/MatchFilters";
-import { UpcomingMatchCard } from "@/components/matches/UpcomingMatchCard";
-import { LiveMatchCard } from "@/components/matches/LiveMatchCard";
-import { ResultCard } from "@/components/matches/ResultCard";
+import { MatchCard } from "@/components/matches/MatchCard";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
-import { getMatchLocalDateKey, groupMatchesByDate } from "@/lib/format";
-import { isFinishedMatchStatus, isLiveMatchStatus, isUpcomingMatchStatus } from "@/lib/match-filters";
+import { groupMatchesByDate } from "@/lib/format";
+import { filterMatchesByCriteria } from "@/lib/match-filters";
 import { cn } from "@/lib/utils";
-import type { Competition, Match, Team } from "@/types";
-
-function MatchCardForStatus({ match, homeTeam, awayTeam, competition }: {
-  match: Match;
-  homeTeam: Team;
-  awayTeam: Team;
-  competition: Competition;
-}) {
-  if (isLiveMatchStatus(match.status)) {
-    return <LiveMatchCard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />;
-  }
-  if (match.status === "finished") {
-    return <ResultCard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />;
-  }
-  return <UpcomingMatchCard match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />;
-}
 
 const CalendarPage = () => {
   useDocumentMeta({ title: "Calendario", description: "Próximos partidos por fecha, competición y estado." });
@@ -41,21 +23,15 @@ const CalendarPage = () => {
   const [statusFilter, setStatusFilter] = useState<MatchFilter>("all");
   const dateKey = date ? format(date, "yyyy-MM-dd") : undefined;
   const windowQuery = useSportsWindow();
-  const dateQuery = useSportsDate(dateKey);
+  const dateQuery = useSportsLocalDate(dateKey);
   const activeQuery = date ? dateQuery : windowQuery;
   const bundle = activeQuery.bundle;
   const { matches, competitions, teams } = bundle;
-  const getTeam = (id: string) => teams.find((team) => team.id === id)!;
+  const teamById = useMemo(() => new Map(teams.map((team) => [team.id, team])), [teams]);
+  const competitionById = useMemo(() => new Map(competitions.map((competition) => [competition.id, competition])), [competitions]);
 
   const filtered = useMemo(() => {
-    return matches.filter((m) => {
-      if (statusFilter === "live" && !isLiveMatchStatus(m.status)) return false;
-      if (statusFilter === "upcoming" && !isUpcomingMatchStatus(m.status)) return false;
-      if (statusFilter === "finished" && !isFinishedMatchStatus(m.status)) return false;
-      if (comp !== "all" && m.competitionId !== comp) return false;
-      if (dateKey && getMatchLocalDateKey(m.startsAt) !== dateKey) return false;
-      return true;
-    });
+    return filterMatchesByCriteria(matches, { status: statusFilter, competitionId: comp, localDate: dateKey });
   }, [matches, statusFilter, comp, dateKey]);
 
   const groups = useMemo(
@@ -106,13 +82,14 @@ const CalendarPage = () => {
               <h2 className="mb-3 font-display text-lg font-semibold capitalize">{group.label}</h2>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {group.matches.map((m) => (
-                  <MatchCardForStatus
-                    key={m.id}
-                    match={m}
-                    homeTeam={getTeam(m.homeTeamId)}
-                    awayTeam={getTeam(m.awayTeamId)}
-                    competition={competitions.find((c) => c.id === m.competitionId)!}
-                  />
+                  (() => {
+                    const homeTeam = teamById.get(m.homeTeamId);
+                    const awayTeam = teamById.get(m.awayTeamId);
+                    const competition = competitionById.get(m.competitionId);
+                    return homeTeam && awayTeam && competition
+                      ? <MatchCard key={m.id} match={m} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />
+                      : null;
+                  })()
                 ))}
               </div>
             </div>

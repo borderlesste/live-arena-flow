@@ -23,6 +23,19 @@ describe("mapSportsEvents", () => {
     expect(mapSportsEvents([event], [source]).matches[0].streams[0].title).toBe("OBS principal");
   });
 
+  it("deduplicates events, preserves phase metadata and prioritizes the primary stream", () => {
+    const sources = [
+      { id: "secondary", matchId: "event-1", createdAt: new Date().toISOString(), type: "hls", url: "https://cdn.example.com/secondary.m3u8", title: "Secundaria", isExternal: false, purpose: "live" },
+      { id: "primary", matchId: "event-1", createdAt: new Date().toISOString(), type: "hls", url: "https://cdn.example.com/primary.m3u8", title: "Principal", isExternal: false, purpose: "live", isPrimary: true },
+    ] as const;
+    const bundle = mapSportsEvents([{ ...event, phase: "Final", group: "A", city: "São Paulo" }, { ...event }], [...sources]);
+
+    expect(bundle.matches).toHaveLength(1);
+    expect(bundle.matches[0]).toMatchObject({ phase: "Final", group: "A", city: "São Paulo" });
+    expect(bundle.matches[0].streams.map((source) => source.id)).toEqual(["primary", "secondary"]);
+    expect(bundle.competitions[0]).toMatchObject({ totalMatches: 1 });
+  });
+
   it("discards every non-football event", () => {
     const foreignSport = { ...event, sport: "Basketball" } as unknown as NormalizedSportsEvent;
     expect(mapSportsEvents([foreignSport])).toEqual({ matches: [], teams: [], competitions: [] });

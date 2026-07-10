@@ -1,13 +1,55 @@
-import { format, formatDistanceToNowStrict, isToday, isTomorrow, isYesterday, startOfDay } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
 import type { Competition, Match } from "@/types";
 
+export const SPORTS_DISPLAY_TIME_ZONE = "America/Sao_Paulo";
+
+const dateKeyFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: SPORTS_DISPLAY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const timeFormatter = new Intl.DateTimeFormat("es", {
+  timeZone: SPORTS_DISPLAY_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const shortDateFormatter = new Intl.DateTimeFormat("es", {
+  timeZone: SPORTS_DISPLAY_TIME_ZONE,
+  day: "numeric",
+  month: "short",
+});
+const longDateFormatter = new Intl.DateTimeFormat("es", {
+  timeZone: SPORTS_DISPLAY_TIME_ZONE,
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+function localDateKey(value: Date): string {
+  const parts = Object.fromEntries(dateKeyFormatter.formatToParts(value).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function shiftDateKey(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) throw new Error("INVALID_DATE_KEY");
+  return new Date(date.getTime() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
 export function formatMatchDate(iso: string): string {
   const date = new Date(iso);
-  if (isToday(date)) return `Hoy · ${format(date, "HH:mm")}`;
-  if (isTomorrow(date)) return `Mañana · ${format(date, "HH:mm")}`;
-  if (isYesterday(date)) return `Ayer · ${format(date, "HH:mm")}`;
-  return format(date, "d MMM · HH:mm", { locale: es });
+  if (Number.isNaN(date.getTime())) return "Horario por confirmar";
+  const eventKey = localDateKey(date);
+  const todayKey = localDateKey(new Date());
+  const time = timeFormatter.format(date);
+  if (eventKey === todayKey) return `Hoy · ${time}`;
+  if (eventKey === shiftDateKey(todayKey, 1)) return `Mañana · ${time}`;
+  if (eventKey === shiftDateKey(todayKey, -1)) return `Ayer · ${time}`;
+  return `${shortDateFormatter.format(date)} · ${time}`;
 }
 
 export function formatRelativeShort(iso: string): string {
@@ -16,14 +58,18 @@ export function formatRelativeShort(iso: string): string {
 
 export function formatDayGroup(iso: string): string {
   const date = new Date(iso);
-  if (isToday(date)) return "Hoy";
-  if (isTomorrow(date)) return "Mañana";
-  return format(date, "EEEE d 'de' MMMM", { locale: es });
+  if (Number.isNaN(date.getTime())) return "Fecha por confirmar";
+  const eventKey = localDateKey(date);
+  const todayKey = localDateKey(new Date());
+  if (eventKey === todayKey) return "Hoy";
+  if (eventKey === shiftDateKey(todayKey, 1)) return "Mañana";
+  return longDateFormatter.format(date).replace(/ de \d{4}$/, "");
 }
 
 /** Local calendar date (yyyy-MM-dd) for grouping and filtering matches. */
 export function getMatchLocalDateKey(iso: string): string {
-  return format(new Date(iso), "yyyy-MM-dd");
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "invalid" : localDateKey(date);
 }
 
 export function formatDuration(seconds: number): string {
@@ -61,14 +107,18 @@ export function normalizeMatchDate(match: Match): { timestamp: number | null; da
   }
 
   const date = new Date(timestamp);
-  const dayStart = startOfDay(date).getTime();
-  const normalized = new Date(date);
-  const dayLabel = isToday(normalized) ? "Hoy" : isYesterday(normalized) ? "Ayer" : format(normalized, "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
+  const eventKey = localDateKey(date);
+  const todayKey = localDateKey(new Date());
+  const dayLabel = eventKey === todayKey
+    ? "Hoy"
+    : eventKey === shiftDateKey(todayKey, -1)
+      ? "Ayer"
+      : longDateFormatter.format(date);
 
   return {
     timestamp,
     dateLabel: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
-    sortKey: format(date, "yyyy-MM-dd"),
+    sortKey: eventKey,
   };
 }
 

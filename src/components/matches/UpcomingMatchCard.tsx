@@ -6,6 +6,7 @@ import { formatMatchDate } from "@/lib/format";
 import { SPORT_LABEL } from "@/lib/sports";
 import { toast } from "sonner";
 import { useFavoriteMatch } from "@/hooks/useFavoriteMatch";
+import { matchStatusLabel } from "@/lib/match-filters";
 import type { Match, Team, Competition } from "@/types";
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 
 export function UpcomingMatchCard({ match, homeTeam, awayTeam, competition }: Props) {
   const followed = useFavoriteMatch(match.id);
+  const canFollow = match.status === "scheduled";
   async function toggleFollow() {
     try {
       const next = await followed.toggle();
@@ -31,6 +33,9 @@ export function UpcomingMatchCard({ match, homeTeam, awayTeam, competition }: Pr
         <span className="min-w-0 truncate">{competition.name} · {SPORT_LABEL[match.sport]}</span>
         <span className="shrink-0">{formatMatchDate(match.startsAt)}</span>
       </div>
+      <span className="w-fit rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-foreground/90">
+        {matchStatusLabel(match.status)}
+      </span>
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <TeamBadge team={homeTeam} size="md" />
@@ -47,9 +52,9 @@ export function UpcomingMatchCard({ match, homeTeam, awayTeam, competition }: Pr
         <span className={`shrink-0 ${match.streams.length > 0 ? "text-success" : "text-muted-foreground"}`}>{match.streams.length > 0 ? "Fuente configurada" : "Sin fuente configurada"}</span>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
-        <Button variant={followed.favorite ? "secondary" : "outline"} size="sm" onClick={() => void toggleFollow()} aria-pressed={followed.favorite}>
+        <Button variant={followed.favorite ? "secondary" : "outline"} size="sm" onClick={() => void toggleFollow()} aria-pressed={followed.favorite} disabled={!canFollow}>
           {followed.favorite ? <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Bell className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-          {followed.favorite ? "Siguiendo" : "Seguir"}
+          {followed.favorite ? "Siguiendo" : canFollow ? "Seguir" : matchStatusLabel(match.status)}
         </Button>
         <Button asChild variant="ghost" size="sm" className="ml-auto">
           <Link to={`/match/${match.id}`}>Ver detalles</Link>

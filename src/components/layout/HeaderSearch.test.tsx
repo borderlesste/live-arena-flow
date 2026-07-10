@@ -24,7 +24,7 @@ vi.mock("@/hooks/useSportsData", () => ({
         { id: "civ", name: "Côte d'Ivoire", shortName: "CIV", monogram: "CI", color: "20 70% 50%" },
         { id: "norway", name: "Norway", shortName: "NOR", monogram: "NO", color: "200 70% 50%" },
       ],
-      competitions: [{ id: "world", name: "World Championship", region: "World", sport: "football", monogram: "WC", color: "10 70% 50%", activeMatches: 0 }],
+      competitions: [{ id: "world", name: "World Championship", region: "World", sport: "football", monogram: "WC", color: "10 70% 50%", activeMatches: 0, totalMatches: 1 }],
     },
   }),
 }));

@@ -3,6 +3,7 @@ import {
   filterFinishedEvents,
   filterLiveEvents,
   filterMatches,
+  filterMatchesByCriteria,
   filterUpcomingEvents,
   isLiveMatchStatus,
 } from "./match-filters";
@@ -42,5 +43,14 @@ describe("match filters", () => {
   it("exposes shared route-specific filters", () => {
     expect(filterUpcomingEvents(matches).map((m) => m.id)).toEqual(["upcoming"]);
     expect(filterFinishedEvents(matches).map((m) => m.id)).toEqual(["finished"]);
+  });
+
+  it("combina estado, competición y fecha local de São Paulo", () => {
+    const nearUtcBoundary = { ...match("boundary", "scheduled"), startsAt: "2026-07-11T01:30:00.000Z" };
+    expect(filterMatchesByCriteria([nearUtcBoundary], {
+      status: "upcoming",
+      competitionId: "competition",
+      localDate: "2026-07-10",
+    }).map((item) => item.id)).toEqual(["boundary"]);
   });
 });

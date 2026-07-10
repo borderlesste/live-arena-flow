@@ -9,10 +9,12 @@ export const normalizedSportsEventSchema = z.object({
   awayTeam: z.object({ id: z.string().min(1), name: z.string().min(1), badgeUrl: z.string().url().optional() }),
   homeScore: z.number().int().nonnegative(),
   awayScore: z.number().int().nonnegative(),
-  status: z.enum(["scheduled", "live", "halftime", "paused", "finished", "postponed", "cancelled"]),
+  status: z.enum(["scheduled", "live", "halftime", "paused", "finished", "postponed", "cancelled", "unknown"]),
   statusLabel: z.string().optional(),
   venue: z.string().optional(),
   city: z.string().optional(),
+  phase: z.string().optional(),
+  group: z.string().optional(),
   highlightUrl: z.string().url().optional(),
 });
 
@@ -23,6 +25,50 @@ export interface SportsProvider {
   eventsByDate(date: string): Promise<NormalizedSportsEvent[]>;
   liveEvents(): Promise<NormalizedSportsEvent[]>;
   eventById(id: string): Promise<NormalizedSportsEvent | undefined>;
+}
+
+const SPORTS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export function enumerateSportsDates(start: string, end: string, maxDays = 62): string[] {
+  if (!SPORTS_DATE_PATTERN.test(start) || !SPORTS_DATE_PATTERN.test(end)) {
+    throw new Error("INVALID_SPORTS_DATE_RANGE");
+  }
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+  if (
+    Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) ||
+    startDate.toISOString().slice(0, 10) !== start || endDate.toISOString().slice(0, 10) !== end ||
+    startDate > endDate
+  ) {
+    throw new Error("INVALID_SPORTS_DATE_RANGE");
+  }
+  const dayCount = Math.floor((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1;
+  if (dayCount > maxDays) throw new Error("SPORTS_DATE_RANGE_TOO_LARGE");
+  return Array.from({ length: dayCount }, (_, index) =>
+    new Date(startDate.getTime() + index * 86_400_000).toISOString().slice(0, 10));
+}
+
+export async function eventsByDateRange(
+  provider: SportsProvider,
+  start: string,
+  end: string,
+  concurrency = 4,
+): Promise<NormalizedSportsEvent[]> {
+  const dates = enumerateSportsDates(start, end);
+  const batches: NormalizedSportsEvent[][] = [];
+  const workerCount = Math.max(1, Math.min(Math.trunc(concurrency), dates.length));
+  let nextIndex = 0;
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < dates.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      batches[index] = await provider.eventsByDate(dates[index]);
+    }
+  }));
+
+  return [...new Map(batches.flat().map((event) => [event.id, event])).values()]
+    .sort((left, right) => left.startsAt.localeCompare(right.startsAt) || left.id.localeCompare(right.id));
 }
 
 interface RequestOptions { headers?: Record<string, string> }

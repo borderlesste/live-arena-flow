@@ -2,6 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CachedSportsProvider,
+  enumerateSportsDates,
+  eventsByDateRange,
   ResilientHttpClient,
   type NormalizedSportsEvent,
   type SportsProvider,
@@ -72,6 +74,32 @@ describe("CachedSportsProvider", () => {
   });
 });
 
+describe("sports date ranges", () => {
+  it("enumerates the complete inclusive World Cup window", () => {
+    const dates = enumerateSportsDates("2026-06-11", "2026-07-19");
+    expect(dates).toHaveLength(39);
+    expect(dates[0]).toBe("2026-06-11");
+    expect(dates.at(-1)).toBe("2026-07-19");
+  });
+
+  it("deduplicates and orders range responses", async () => {
+    const provider: SportsProvider = {
+      name: "range",
+      eventsByDate: vi.fn(async (date) => [{ ...event, id: date === "2026-06-11" ? "same" : "later", startsAt: `${date}T12:00:00.000Z` }]),
+      liveEvents: async () => [],
+      eventById: async () => undefined,
+    };
+    const result = await eventsByDateRange(provider, "2026-06-11", "2026-06-12", 2);
+    expect(result.map((item) => item.id)).toEqual(["same", "later"]);
+    expect(provider.eventsByDate).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects invalid and excessive ranges", () => {
+    expect(() => enumerateSportsDates("2026-07-19", "2026-06-11")).toThrow("INVALID_SPORTS_DATE_RANGE");
+    expect(() => enumerateSportsDates("2026-01-01", "2026-12-31")).toThrow("SPORTS_DATE_RANGE_TOO_LARGE");
+  });
+});
+
 describe("ResilientHttpClient", () => {
   it("retries recoverable upstream responses", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
@@ -93,6 +121,15 @@ describe("ResilientHttpClient", () => {
 });
 
 describe("SportSRC V2 provider", () => {
+  it("treats successful null data as an empty provider day", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ success: true, data: null }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    await expect(new SportSrcProvider("license-key").eventsByDate("2026-06-13")).resolves.toEqual([]);
+    fetchMock.mockRestore();
+  });
+
   it("uses the official query contract and normalizes grouped matches", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(listPayload()), {
       status: 200,
@@ -108,6 +145,7 @@ describe("SportSRC V2 provider", () => {
       competition: { name: "World Cup", region: "International" },
       homeTeam: { name: "Brasil" },
       awayTeam: { name: "Argentina" },
+      phase: "Final",
     });
     const [request, options] = fetchMock.mock.calls[0];
     const url = new URL(String(request));
@@ -224,5 +262,6 @@ describe("SportSRC V2 provider", () => {
     expect(normalizeSportSrcStatus("upcoming", undefined)).toBe("scheduled");
     expect(normalizeSportSrcStatus("not_started", undefined)).toBe("scheduled");
     expect(normalizeSportSrcStatus("notstarted", "Upcoming")).toBe("scheduled");
+    expect(normalizeSportSrcStatus("mystery", "pending review")).toBe("unknown");
   });
 });

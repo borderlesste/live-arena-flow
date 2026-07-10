@@ -1,17 +1,43 @@
 import type { Competition, Match, Team } from "@/types";
 
-function normalize(value: string): string {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+export function normalizeMatchSearchText(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("es");
 }
 
 export function matchesSearch(match: Match, teams: Team[], competitions: Competition[], query: string): boolean {
-  const term = normalize(query.trim());
+  const teamById = new Map(teams.map((team) => [team.id, team]));
+  const competitionById = new Map(competitions.map((competition) => [competition.id, competition]));
+  return matchesIndexedSearch(match, teamById, competitionById, query);
+}
+
+function matchesIndexedSearch(
+  match: Match,
+  teamById: Map<string, Team>,
+  competitionById: Map<string, Competition>,
+  query: string,
+): boolean {
+  const term = normalizeMatchSearchText(query);
   if (!term) return true;
-  const home = teams.find((team) => team.id === match.homeTeamId);
-  const away = teams.find((team) => team.id === match.awayTeamId);
-  const competition = competitions.find((item) => item.id === match.competitionId);
-  return [home?.name, home?.shortName, away?.name, away?.shortName, competition?.name, competition?.region, match.venue]
-    .some((value) => value && normalize(value).includes(term));
+  const home = teamById.get(match.homeTeamId);
+  const away = teamById.get(match.awayTeamId);
+  const competition = competitionById.get(match.competitionId);
+  return [
+    home?.name, home?.shortName, away?.name, away?.shortName,
+    competition?.name, competition?.region, match.venue, match.city, match.phase, match.group,
+  ].some((value) => value && normalizeMatchSearchText(value).includes(term));
+}
+
+export function searchMatches(
+  matches: Match[],
+  teams: Team[],
+  competitions: Competition[],
+  query: string,
+): Match[] {
+  const term = normalizeMatchSearchText(query);
+  if (!term) return matches;
+  const teamById = new Map(teams.map((team) => [team.id, team]));
+  const competitionById = new Map(competitions.map((competition) => [competition.id, competition]));
+  return matches.filter((match) => matchesIndexedSearch(match, teamById, competitionById, term));
 }
 
 export interface MatchSearchResult {
@@ -33,8 +59,7 @@ export function findMatchSearchResults(
   const competitionById = new Map(competitions.map((competition) => [competition.id, competition]));
   const results: MatchSearchResult[] = [];
 
-  for (const match of matches) {
-    if (!matchesSearch(match, teams, competitions, query)) continue;
+  for (const match of searchMatches(matches, teams, competitions, query)) {
     const homeTeam = teamById.get(match.homeTeamId);
     const awayTeam = teamById.get(match.awayTeamId);
     const competition = competitionById.get(match.competitionId);

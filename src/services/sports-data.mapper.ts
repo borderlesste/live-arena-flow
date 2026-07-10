@@ -4,6 +4,23 @@ import type { ManagedVideoSource } from "@/services/video-sources.service";
 
 export interface SportsDataBundle { matches: Match[]; teams: Team[]; competitions: Competition[] }
 
+export function dedupeSportsEvents(events: NormalizedSportsEvent[]): NormalizedSportsEvent[] {
+  const unique = new Map<string, NormalizedSportsEvent>();
+  for (const event of events) {
+    const existing = unique.get(event.id);
+    unique.set(event.id, existing ? {
+      ...existing,
+      ...event,
+      city: event.city ?? existing.city,
+      phase: event.phase ?? existing.phase,
+      group: event.group ?? existing.group,
+      venue: event.venue ?? existing.venue,
+      highlightUrl: event.highlightUrl ?? existing.highlightUrl,
+    } : event);
+  }
+  return [...unique.values()];
+}
+
 function colorFor(value: string): string {
   let hash = 0;
   for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) | 0;
@@ -54,7 +71,7 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
     return existingTimestamp <= candidateTimestamp ? existing : candidate;
   };
 
-  const matches = events
+  const matches = dedupeSportsEvents(events)
     .map((event): Match | null => {
       const sport = mapSport(event.sport);
       if (!sport) return null; // discard non-football events
@@ -73,10 +90,13 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
         id: event.competition.id, name: event.competition.name, region: event.competition.region ?? "Internacional", sport,
         monogram: monogram(event.competition.name), color: colorFor(event.competition.id), badgeUrl: event.competition.badgeUrl,
         activeMatches: (existing?.activeMatches ?? 0) + (event.status === "live" ? 1 : 0),
+        totalMatches: (existing?.totalMatches ?? 0) + 1,
         nextEventAt: pickNextEventAt(existing?.nextEventAt, event.startsAt),
       });
 
-      const managedSources = videoSources.filter((source) => source.matchId === event.id);
+      const managedSources = videoSources
+        .filter((source) => source.matchId === event.id && source.isEnabled !== false)
+        .sort((left, right) => Number(right.isPrimary === true) - Number(left.isPrimary === true));
 
       // Only include streams that have a playable URL — OBS sources without
       // STREAM_PLAYBACK_BASE_URL configured won't have a URL yet.
@@ -104,6 +124,7 @@ export function mapSportsEvents(events: NormalizedSportsEvent[], videoSources: M
         homeScore: event.homeScore, awayScore: event.awayScore, status: effectiveStatus,
         clock: effectiveStatus === "live" ? event.statusLabel ?? "En vivo" : undefined,
         startsAt: event.startsAt, venue: event.venue ?? event.city ?? "Sede por confirmar",
+        city: event.city, phase: event.phase, group: event.group,
         streams: playableStreams, highlights,
         hasReplay: managedSources.some((source) => source.purpose === "highlight"),
         hasSummary: highlights.length > 0,

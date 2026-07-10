@@ -34,12 +34,12 @@ function setup() {
 }
 
 describe("CatalogBackedSportsProvider", () => {
-  it("uses the persisted catalog first when canonical data is available", async () => {
+  it("refreshes the provider and returns the combined persisted catalog", async () => {
     const { provider, upstream, catalog } = setup();
     await expect(provider.eventsByDate("2026-07-03")).resolves.toEqual([event]);
-    expect(catalog.eventsByDate).toHaveBeenCalledWith("2026-07-03");
-    expect(upstream.eventsByDate).not.toHaveBeenCalled();
-    expect(catalog.syncProviderEvents).not.toHaveBeenCalled();
+    expect(catalog.eventsByDate).toHaveBeenCalledTimes(2);
+    expect(upstream.eventsByDate).toHaveBeenCalledWith("2026-07-03");
+    expect(catalog.syncProviderEvents).toHaveBeenCalledWith("sportsrc", [event]);
   });
 
   it("reads local events without calling the external provider", async () => {
@@ -53,6 +53,12 @@ describe("CatalogBackedSportsProvider", () => {
     const { provider, catalog } = setup();
     vi.mocked(catalog.syncProviderEvents).mockRejectedValueOnce(new Error("db unavailable"));
     vi.mocked(catalog.eventsByDate).mockRejectedValueOnce(new Error("db unavailable"));
+    await expect(provider.eventsByDate("2026-07-03")).resolves.toEqual([event]);
+  });
+
+  it("returns persisted events when the upstream provider fails", async () => {
+    const { provider, upstream } = setup();
+    vi.mocked(upstream.eventsByDate).mockRejectedValueOnce(new Error("provider unavailable"));
     await expect(provider.eventsByDate("2026-07-03")).resolves.toEqual([event]);
   });
 });

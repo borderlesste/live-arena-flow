@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useWorldChampionshipData } from "@/hooks/useSportsData";
-import { LiveMatchCard } from "@/components/matches/LiveMatchCard";
-import { UpcomingMatchCard } from "@/components/matches/UpcomingMatchCard";
-import { ResultCard } from "@/components/matches/ResultCard";
+import { MatchCard } from "@/components/matches/MatchCard";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { Button } from "@/components/ui/button";
@@ -11,48 +9,28 @@ import { groupMatchesByDate } from "@/lib/format";
 import { isLiveMatchStatus } from "@/lib/match-filters";
 import {
   filterWorldChampionshipMatches,
+  groupWorldChampionshipMatchesByPhase,
   isWorldChampionshipCompetition,
-  splitWorldChampionshipTimeline,
+  WORLD_CHAMPIONSHIP_END_DATE,
   WORLD_CHAMPIONSHIP_NAME,
+  WORLD_CHAMPIONSHIP_START_DATE,
 } from "@/lib/world-championship";
-import type { Competition, Match, Team } from "@/types";
+import type { Competition, Team } from "@/types";
 
-function renderMatchCard(
-  match: Match,
-  getTeam: (id: string) => Team,
-  competition: Competition,
-) {
-  const home = getTeam(match.homeTeamId);
-  const away = getTeam(match.awayTeamId);
-
-  if (isLiveMatchStatus(match.status)) {
-    return <LiveMatchCard key={match.id} match={match} homeTeam={home} awayTeam={away} competition={competition} />;
-  }
-  if (match.status === "scheduled") {
-    return <UpcomingMatchCard key={match.id} match={match} homeTeam={home} awayTeam={away} competition={competition} />;
-  }
-  if (match.status === "finished") {
-    return <ResultCard key={match.id} match={match} homeTeam={home} awayTeam={away} competition={competition} />;
-  }
-  return null;
-}
-
-function TimelineSection({
+function PhaseSection({
   title,
   description,
-  groups,
-  getTeam,
+  matches,
+  teamById,
   competition,
-  emptyTitle,
 }: {
   title: string;
   description: string;
-  groups: ReturnType<typeof groupMatchesByDate>;
-  getTeam: (id: string) => Team;
+  matches: ReturnType<typeof groupWorldChampionshipMatchesByPhase>[number]["matches"];
+  teamById: Map<string, Team>;
   competition: Competition;
-  emptyTitle: string;
 }) {
-  const totalMatches = groups.reduce((count, group) => count + group.matches.length, 0);
+  const groups = groupMatchesByDate(matches, { order: "asc" });
 
   return (
     <section aria-labelledby={title.replace(/\s+/g, "-").toLowerCase()} className="space-y-4">
@@ -60,22 +38,22 @@ function TimelineSection({
         <h2 id={title.replace(/\s+/g, "-").toLowerCase()} className="font-display text-xl font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
       </header>
-      {totalMatches === 0 ? (
-        <EmptyState title={emptyTitle} description="Los partidos aparecerán aquí cuando el proveedor los publique." />
-      ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
-            <div key={group.key} className="space-y-3">
-              {groups.length > 1 ? (
-                <h3 className="font-display text-lg font-semibold capitalize">{group.label}</h3>
-              ) : null}
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {group.matches.map((match) => renderMatchCard(match, getTeam, competition))}
-              </div>
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.key} className="space-y-3">
+            <h3 className="font-display text-lg font-semibold capitalize">{group.label}</h3>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {group.matches.map((match) => {
+                const homeTeam = teamById.get(match.homeTeamId);
+                const awayTeam = teamById.get(match.awayTeamId);
+                return homeTeam && awayTeam
+                  ? <MatchCard key={match.id} match={match} homeTeam={homeTeam} awayTeam={awayTeam} competition={competition} />
+                  : null;
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -88,7 +66,7 @@ const WorldChampionshipPage = () => {
 
   const { bundle, isLoading, isError, refetch } = useWorldChampionshipData();
   const { matches, competitions, teams } = bundle;
-  const getTeam = (id: string) => teams.find((team) => team.id === id)!;
+  const teamById = useMemo(() => new Map(teams.map((team) => [team.id, team])), [teams]);
 
   const competition = useMemo(
     () => competitions.find(isWorldChampionshipCompetition),
@@ -100,24 +78,9 @@ const WorldChampionshipPage = () => {
     [matches, competitions],
   );
 
-  const timeline = useMemo(
-    () => splitWorldChampionshipTimeline(worldMatches),
+  const phases = useMemo(
+    () => groupWorldChampionshipMatchesByPhase(worldMatches),
     [worldMatches],
-  );
-
-  const presentGroups = useMemo(
-    () => [{ key: "present", label: "Ahora", matches: timeline.present }],
-    [timeline.present],
-  );
-
-  const pastGroups = useMemo(
-    () => groupMatchesByDate(timeline.past, { order: "desc" }),
-    [timeline.past],
-  );
-
-  const futureGroups = useMemo(
-    () => groupMatchesByDate(timeline.future, { order: "asc" }),
-    [timeline.future],
   );
 
   const fallbackCompetition: Competition = competition ?? {
@@ -127,7 +90,8 @@ const WorldChampionshipPage = () => {
     sport: "football",
     monogram: "WC",
     color: "10 70% 50%",
-    activeMatches: timeline.present.filter((match) => isLiveMatchStatus(match.status)).length,
+    activeMatches: worldMatches.filter((match) => isLiveMatchStatus(match.status)).length,
+    totalMatches: worldMatches.length,
   };
 
   return (
@@ -136,7 +100,7 @@ const WorldChampionshipPage = () => {
         <p className="text-xs uppercase tracking-wider text-primary">Torneo internacional</p>
         <h1 className="font-display text-3xl font-bold">{WORLD_CHAMPIONSHIP_NAME}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Sigue el torneo en tres bloques: partidos ya jugados, el encuentro actual y los próximos partidos programados.
+          Todos los partidos entre el 11 de junio y el 19 de julio de 2026, ordenados por fase y fecha.
         </p>
       </header>
 
@@ -151,34 +115,20 @@ const WorldChampionshipPage = () => {
       ) : worldMatches.length === 0 ? (
         <EmptyState
           title="Sin partidos del World Championship"
-          description="El proveedor no devolvió encuentros de este torneo en la ventana consultada."
+          description={`El proveedor no devolvió encuentros entre ${WORLD_CHAMPIONSHIP_START_DATE} y ${WORLD_CHAMPIONSHIP_END_DATE}.`}
         />
       ) : (
         <div className="space-y-10">
-          <TimelineSection
-            title="Presente"
-            description="Partidos en directo ahora, los de hoy o el próximo encuentro si no hay ninguno programado para hoy."
-            groups={presentGroups}
-            getTeam={getTeam}
-            competition={fallbackCompetition}
-            emptyTitle="No hay partido actual"
-          />
-          <TimelineSection
-            title="Futuro"
-            description="Próximos partidos del torneo, ordenados cronológicamente."
-            groups={futureGroups}
-            getTeam={getTeam}
-            competition={fallbackCompetition}
-            emptyTitle="No hay partidos futuros"
-          />
-          <TimelineSection
-            title="Pasado"
-            description="Partidos finalizados, empezando por los más recientes."
-            groups={pastGroups}
-            getTeam={getTeam}
-            competition={fallbackCompetition}
-            emptyTitle="Aún no hay resultados"
-          />
+          {phases.map((phase) => (
+            <PhaseSection
+              key={phase.key}
+              title={phase.label}
+              description={`${phase.matches.length} ${phase.matches.length === 1 ? "partido" : "partidos"} en esta fase.`}
+              matches={phase.matches}
+              teamById={teamById}
+              competition={fallbackCompetition}
+            />
+          ))}
         </div>
       )}
     </section>

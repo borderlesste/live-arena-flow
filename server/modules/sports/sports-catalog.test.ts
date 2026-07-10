@@ -16,7 +16,7 @@ describe("sports catalog timestamps", () => {
       venue: null,
       home_score: 0,
       away_score: 0,
-      raw_payload: null,
+      raw_payload: { phase: "Group Stage", group: "A", city: "São Paulo" },
       competition: {
         id: "00000000-0000-4000-8000-000000000002",
         external_id: "sportsrc-competition-world-cup",
@@ -39,7 +39,12 @@ describe("sports catalog timestamps", () => {
       },
     });
 
-    expect(event?.startsAt).toBe("2026-07-03T18:00:00.000Z");
+    expect(event).toMatchObject({
+      startsAt: "2026-07-03T18:00:00.000Z",
+      phase: "Group Stage",
+      group: "A",
+      city: "São Paulo",
+    });
   });
 
   it("rejects irrecoverable timestamps explicitly", () => {

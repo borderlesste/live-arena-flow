@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { findMatchSearchResults, matchesSearch } from "@/lib/match-search";
+import { findMatchSearchResults, matchesSearch, searchMatches } from "@/lib/match-search";
 import type { Competition, Match, Team } from "@/types";
 
 const teams: Team[] = [
   { id: "home", name: "Bahía Athletic", shortName: "BAH", monogram: "BA", color: "200 70% 50%" },
   { id: "away", name: "Capital Stars", shortName: "CAP", monogram: "CS", color: "20 70% 50%" },
 ];
-const competitions: Competition[] = [{ id: "league", name: "Copa Internacional", region: "España", sport: "football", monogram: "CI", color: "10 70% 50%", activeMatches: 0 }];
+const competitions: Competition[] = [{ id: "league", name: "Copa Internacional", region: "España", sport: "football", monogram: "CI", color: "10 70% 50%", activeMatches: 0, totalMatches: 1 }];
 const match: Match = { id: "match", sport: "football", competitionId: "league", homeTeamId: "home", awayTeamId: "away", homeScore: 0, awayScore: 0, status: "scheduled", startsAt: "2026-06-20T20:00:00Z", venue: "Estadio Central", streams: [] };
 
 describe("matchesSearch", () => {
@@ -17,6 +17,16 @@ describe("matchesSearch", () => {
     expect(matchesSearch(match, teams, competitions, "central")).toBe(true);
   });
   it("rechaza términos ausentes", () => expect(matchesSearch(match, teams, competitions, "Barcelona")).toBe(false));
+
+  it("usa el mismo motor Unicode para listado y sugerencias", () => {
+    expect(searchMatches([match], teams, competitions, "São BAHÍA")).toEqual([]);
+    expect(searchMatches([match], teams, competitions, "bahia").map((item) => item.id)).toEqual(["match"]);
+    expect(findMatchSearchResults([match], teams, competitions, "BAHÍA").map((item) => item.match.id)).toEqual(["match"]);
+  });
+
+  it("trata HTML externo como texto de búsqueda, no como markup", () => {
+    expect(searchMatches([match], teams, competitions, "<script>alert(1)</script>")).toEqual([]);
+  });
 
   it("devuelve sugerencias completas y limita resultados", () => {
     const results = findMatchSearchResults([match, { ...match, id: "match-2" }], teams, competitions, "capital", 1);

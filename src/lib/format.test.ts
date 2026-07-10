@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { format } from "date-fns";
 import {
   getMatchLocalDateKey,
   groupEventsByLocalDate,
@@ -69,9 +68,8 @@ describe("sortCompetitionsByPriority", () => {
 });
 
 describe("getMatchLocalDateKey", () => {
-  it("returns the local calendar day in yyyy-MM-dd format", () => {
-    const iso = "2026-07-08T22:00:00.000Z";
-    expect(getMatchLocalDateKey(iso)).toBe(format(new Date(iso), "yyyy-MM-dd"));
+  it("returns the São Paulo calendar day in yyyy-MM-dd format", () => {
+    expect(getMatchLocalDateKey("2026-07-11T01:30:00.000Z")).toBe("2026-07-10");
   });
 });
 

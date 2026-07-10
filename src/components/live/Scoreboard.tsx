@@ -87,6 +87,7 @@ function statusText(s: Match["status"]): string {
     case "finished": return "Final";
     case "postponed": return "Aplazado";
     case "cancelled": return "Cancelado";
+    case "unknown": return "Por confirmar";
     default: return "";
   }
 }

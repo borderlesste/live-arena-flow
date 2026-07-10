@@ -8,6 +8,7 @@ export const matchStatusSchema = z.enum([
   "finished",
   "postponed",
   "cancelled",
+  "unknown",
 ]);
 
 export const sportSchema = z.literal("football");

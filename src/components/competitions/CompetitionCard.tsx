@@ -43,8 +43,9 @@ export function CompetitionCard({ competition }: Props) {
       </div>
       <dl className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md bg-surface-2 p-2">
-          <dt className="text-muted-foreground">Partidos activos</dt>
-          <dd className="font-display text-base font-bold">{competition.activeMatches}</dd>
+          <dt className="text-muted-foreground">Partidos</dt>
+          <dd className="font-display text-base font-bold">{competition.totalMatches}</dd>
+          <dd className="text-[11px] text-muted-foreground">{competition.activeMatches > 0 ? `${competition.activeMatches} en vivo` : "Sin partidos en vivo"}</dd>
         </div>
         <div className="rounded-md bg-surface-2 p-2">
           <dt className="text-muted-foreground">Próximo evento</dt>

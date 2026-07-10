@@ -9,7 +9,8 @@ export type MatchStatus =
   | "paused"
   | "finished"
   | "postponed"
-  | "cancelled";
+  | "cancelled"
+  | "unknown";
 
 export type StreamType =
   | "youtube"
@@ -51,6 +52,8 @@ export interface Competition {
   monogram: string;
   color: string;
   activeMatches: number;
+  /** Total de partidos disponibles en la ventana consultada. */
+  totalMatches: number;
   nextEventAt?: string; // ISO
   badgeUrl?: string;
 }
@@ -82,6 +85,8 @@ export interface StreamSource {
   /** Known embed providers; use "custom" or any string for other providers. */
   provider?: "youtube" | "tiktok" | "vimeo" | "custom" | (string & {});
   purpose?: "live" | "highlight";
+  /** Prioridad editorial configurada desde administración. */
+  isPrimary?: boolean;
   obs?: OBSIngestConfig;
 }
 
@@ -104,6 +109,9 @@ export interface Match {
   clock?: string;
   startsAt: string; // ISO
   venue: string;
+  city?: string;
+  phase?: string;
+  group?: string;
   viewers?: number;
   streams: StreamSource[];
   highlights?: StreamSource[];

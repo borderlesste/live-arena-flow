@@ -14,6 +14,7 @@ const competition: Competition = {
   monogram: "LN",
   color: "90 70% 40%",
   activeMatches: 0,
+  totalMatches: 1,
 };
 const match: Match = {
   id: "match-1",
