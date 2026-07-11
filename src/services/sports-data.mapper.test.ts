@@ -72,8 +72,21 @@ describe("mapSportsEvents", () => {
     expect(mapSportsEvents([event], [source]).matches[0].streams).toEqual([]);
     expect(mapSportsEvents([event], [{ ...source, status: "live" }]).matches[0]).toMatchObject({
       status: "live",
-      streams: [expect.objectContaining({ id: "source-obs" })],
+      streams: [expect.objectContaining({ id: "source-obs", isPlayable: true })],
     });
+  });
+
+  it("keeps an OBS poster visible while its signal is not ready", () => {
+    const source = {
+      id: "source-poster", matchId: "event-1", createdAt: new Date().toISOString(),
+      type: "obs_hls", url: "https://cdn.example.com/pending.m3u8", title: "OBS pendiente",
+      coverImageUrl: "https://cdn.example.com/poster.jpg", isExternal: false,
+      purpose: "live", sourceKind: "obs", status: "waiting_signal",
+    } as const;
+
+    expect(mapSportsEvents([event], [source]).matches[0].streams).toEqual([
+      expect.objectContaining({ id: "source-poster", coverImageUrl: source.coverImageUrl, isPlayable: false }),
+    ]);
   });
 
   it("does not use a past event date as nextEventAt", () => {

@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { HlsPlayer } from "./HlsPlayer";
 import { EmbedPlayer } from "./EmbedPlayer";
@@ -30,7 +30,6 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   const [isPlaying, setIsPlaying] = useState(false);
   const [showCover, setShowCover] = useState(Boolean(match.streams[0]?.coverImageUrl));
   const [controlsVisible, setControlsVisible] = useState(true);
-  const [isMobileFullscreen, setIsMobileFullscreen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hideControlsTimerRef = useRef<number | null>(null);
 
@@ -51,18 +50,23 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
     }
   }, []);
 
+  const usesTouchControls = useCallback(() => (
+    typeof window !== "undefined" && typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  ), []);
+
   const showControlsTemporarily = useCallback(() => {
     setControlsVisible(true);
     clearHideControlsTimer();
 
-    if (!isMobileFullscreen || !videoRef.current || videoRef.current.paused) {
+    if (!usesTouchControls() || !videoRef.current || videoRef.current.paused) {
       return;
     }
 
     hideControlsTimerRef.current = window.setTimeout(() => {
       setControlsVisible(false);
     }, 3000);
-  }, [clearHideControlsTimer, isMobileFullscreen]);
+  }, [clearHideControlsTimer, usesTouchControls]);
 
   useEffect(() => {
     setHasStarted(false);
@@ -77,13 +81,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
     if (!container) return;
 
     const updateFullscreenState = () => {
-      const isFullscreen = document.fullscreenElement === container;
-      const isTouchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function"
-        ? window.matchMedia("(pointer: coarse)").matches
-        : false;
-
-      setIsMobileFullscreen(isFullscreen && isTouchDevice);
-      if (!isFullscreen || !isTouchDevice) {
+      if (!usesTouchControls()) {
         setControlsVisible(true);
         clearHideControlsTimer();
         return;
@@ -106,7 +104,7 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
       window.removeEventListener("resize", updateFullscreenState);
       clearHideControlsTimer();
     };
-  }, [clearHideControlsTimer, isPlaying, showControlsTemporarily]);
+  }, [clearHideControlsTimer, isPlaying, showControlsTemporarily, usesTouchControls]);
 
   useEffect(() => {
     const media = videoRef.current;
@@ -161,6 +159,26 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
     if (fallback) handleSelect(fallback.id);
   }
 
+  function handlePlayerPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse") return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-player-interactive]")) {
+      showControlsTemporarily();
+      return;
+    }
+    if (!isPlaying) {
+      setControlsVisible(true);
+      clearHideControlsTimer();
+      return;
+    }
+    if (controlsVisible) {
+      clearHideControlsTimer();
+      setControlsVisible(false);
+    } else {
+      showControlsTemporarily();
+    }
+  }
+
   const hasCoverPoster = Boolean(source?.coverImageUrl);
   const canUseCoverOverlay = adapter === "hls" || adapter === "html5";
   const showCoverOverlay = hasCoverPoster && showCover && canUseCoverOverlay;
@@ -181,9 +199,10 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
   return (
     <div
       ref={containerRef}
+      data-testid="live-player"
       className="surface-card relative min-w-0 overflow-hidden rounded-xl shadow-glow"
-      onTouchStart={showControlsTemporarily}
       onMouseMove={showControlsTemporarily}
+      onPointerDown={handlePlayerPointerDown}
     >
       <div className="relative aspect-[4/3] w-full bg-black sm:aspect-video">
         {renderPlayerBody({ status, adapter, source, retry, onSourceError: handleSourceError, hasStarted, videoRef })}
@@ -199,15 +218,22 @@ export function LivePlayer({ match, homeTeam, awayTeam, competitionName, onChang
               className="object-cover"
             />
             <div className="absolute inset-0 bg-black/20" />
-            <button
-              type="button"
-              onClick={handlePlayClick}
-              className="relative z-20 inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg transition hover:bg-slate-100"
-              aria-label="Reproducir transmisión"
-            >
-              <Play className="h-4 w-4" />
-              Reproducir
-            </button>
+            {mediaControlsEnabled ? (
+              <button
+                type="button"
+                data-player-interactive
+                onClick={handlePlayClick}
+                className="relative z-20 inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg transition hover:bg-slate-100"
+                aria-label="Reproducir transmisión"
+              >
+                <Play className="h-4 w-4" />
+                Reproducir
+              </button>
+            ) : (
+              <p className="relative z-20 rounded-full bg-black/70 px-4 py-2 text-sm font-semibold text-white">
+                Transmisión pendiente
+              </p>
+            )}
           </div>
         ) : null}
 

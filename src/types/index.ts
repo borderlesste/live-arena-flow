@@ -82,6 +82,8 @@ export interface StreamSource {
   requiresConsent?: boolean;
   /** Optional cover/poster image URL for native media players. */
   coverImageUrl?: string;
+  /** False when metadata/poster may be shown but playback is not ready yet. */
+  isPlayable?: boolean;
   /** Known embed providers; use "custom" or any string for other providers. */
   provider?: "youtube" | "tiktok" | "vimeo" | "custom" | (string & {});
   purpose?: "live" | "highlight";

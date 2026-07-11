@@ -183,7 +183,16 @@ export function PlayerControls({
     const container = containerRef.current;
     if (!container) return;
     if (!document.fullscreenElement) {
-      container.requestFullscreen?.().catch(() => toast.error("Pantalla completa no disponible"));
+      if (container.requestFullscreen) {
+        container.requestFullscreen().catch(() => toast.error("Pantalla completa no disponible"));
+        return;
+      }
+      const video = container.querySelector("video") as HTMLVideoElement & { webkitEnterFullscreen?: () => void } | null;
+      if (video?.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+        return;
+      }
+      toast.info("Pantalla completa no disponible en este navegador");
     } else {
       document.exitFullscreen?.().catch(() => {});
     }
@@ -206,7 +215,8 @@ export function PlayerControls({
     try {
       if (navigator.share) await navigator.share({ url, title: "Luis Romero Fútbol" });
       else { await navigator.clipboard.writeText(url); toast.success("Enlace copiado al portapapeles"); }
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       toast.error("No se pudo compartir");
     }
   }
@@ -214,10 +224,14 @@ export function PlayerControls({
   return (
     <div
       data-testid="player-controls"
+      data-player-interactive
       onMouseMove={onControlsInteraction}
       onTouchStart={onControlsInteraction}
       onPointerDown={onControlsInteraction}
-      className={cn("pointer-events-auto w-full bg-gradient-to-t from-black via-black/90 to-transparent px-2 pb-2 pt-10 transition-all duration-200 sm:px-3 sm:pb-3 md:px-4", !controlsVisible && "pointer-events-none translate-y-2 opacity-0")}
+      className={cn(
+        "w-full bg-gradient-to-t from-black via-black/90 to-transparent px-2 pb-2 pt-10 transition-all duration-200 sm:px-3 sm:pb-3 md:px-4",
+        controlsVisible ? "pointer-events-auto" : "pointer-events-none translate-y-2 opacity-0",
+      )}
     >
       <SliderPrimitive.Root
         value={[timeline.current]}
@@ -236,6 +250,8 @@ export function PlayerControls({
           className="block h-3.5 w-3.5 rounded-full bg-primary opacity-0 shadow-[0_0_0_3px_hsl(var(--primary)/0.2)] transition-opacity focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"
         />
       </SliderPrimitive.Root>
+
+      {streamSwitcher ? <div className="mb-1 min-w-0 md:hidden">{streamSwitcher}</div> : null}
 
       <div className="flex min-h-10 items-center gap-1 text-white sm:gap-2">
         <ControlButton

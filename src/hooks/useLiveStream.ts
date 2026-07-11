@@ -16,6 +16,11 @@ export function useLiveStream(source: StreamSource | undefined): UseLiveStreamSt
   useEffect(() => {
     if (!source) { setStatus("offline"); return; }
 
+    if (source.isPlayable === false) {
+      setStatus("offline");
+      return;
+    }
+
     // OBS source with no playback URL yet — waiting for signal
     if (source.type === "obs_hls" && !source.url) {
       setStatus("offline");
