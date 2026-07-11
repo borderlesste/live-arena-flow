@@ -4,6 +4,24 @@ import type { ManagedVideoSource } from "@/services/video-sources.service";
 
 export interface SportsDataBundle { matches: Match[]; teams: Team[]; competitions: Competition[] }
 
+export function mergeSportsDataBundles(...bundles: SportsDataBundle[]): SportsDataBundle {
+  const matches = new Map<string, Match>();
+  const teams = new Map<string, Team>();
+  const competitions = new Map<string, Competition>();
+
+  for (const bundle of bundles) {
+    for (const match of bundle.matches) matches.set(match.id, match);
+    for (const team of bundle.teams) teams.set(team.id, team);
+    for (const competition of bundle.competitions) competitions.set(competition.id, competition);
+  }
+
+  return {
+    matches: [...matches.values()],
+    teams: [...teams.values()],
+    competitions: [...competitions.values()],
+  };
+}
+
 export function dedupeSportsEvents(events: NormalizedSportsEvent[]): NormalizedSportsEvent[] {
   const unique = new Map<string, NormalizedSportsEvent>();
   for (const event of events) {

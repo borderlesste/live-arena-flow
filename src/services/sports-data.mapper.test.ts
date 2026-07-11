@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapSportsEvents } from "@/services/sports-data.mapper";
+import { mapSportsEvents, mergeSportsDataBundles } from "@/services/sports-data.mapper";
 import type { NormalizedSportsEvent } from "@/schemas/sports-event.schema";
 
 const event: NormalizedSportsEvent = {
@@ -10,6 +10,20 @@ const event: NormalizedSportsEvent = {
 };
 
 describe("mapSportsEvents", () => {
+  it("combina catálogos y elimina partidos repetidos por ID", () => {
+    const nearby = mapSportsEvents([event]);
+    const world = mapSportsEvents([
+      { ...event, homeScore: 4 },
+      { ...event, id: "event-2", homeTeam: { id: "mexico", name: "México" } },
+    ]);
+
+    const bundle = mergeSportsDataBundles(nearby, world);
+
+    expect(bundle.matches.map((match) => match.id)).toEqual(["event-1", "event-2"]);
+    expect(bundle.matches.find((match) => match.id === "event-1")?.homeScore).toBe(4);
+    expect(bundle.teams.some((team) => team.name === "México")).toBe(true);
+  });
+
   it("maps normalized provider events to UI domains", () => {
     const bundle = mapSportsEvents([event]);
     expect(bundle.matches[0]).toMatchObject({ id: "event-1", sport: "football", status: "finished", homeScore: 3, awayScore: 0 });

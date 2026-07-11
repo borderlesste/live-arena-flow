@@ -130,5 +130,22 @@ export function useWorldChampionshipData() {
   return useSportsRange(WORLD_CHAMPIONSHIP_START_DATE, WORLD_CHAMPIONSHIP_END_DATE);
 }
 
+export function useSportsSearchData(enabled: boolean) {
+  const today = new Date().toISOString().slice(0, 10);
+  const start = shiftDateKey(today, -30);
+  const end = shiftDateKey(today, 30);
+  const sourcesQuery = usePublicVideoSources();
+  const query = useQuery({
+    queryKey: ["sportsdb", "search", start, end],
+    queryFn: () => getEventsByRange(start, end),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+  return {
+    ...query,
+    bundle: mapSportsEvents(query.data ?? [], sourcesOrEmpty(sourcesQuery.data)),
+  };
+}
+
 export const useResults = useSportsWindow;
 export const useWorldCupMatches = useWorldChampionshipData;

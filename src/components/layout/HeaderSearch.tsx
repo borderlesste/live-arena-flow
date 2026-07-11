@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useSportsWindow } from "@/hooks/useSportsData";
+import { useSportsSearchData, useSportsWindow } from "@/hooks/useSportsData";
 import { findMatchSearchResults } from "@/lib/match-search";
 import { SPORTS_DISPLAY_TIME_ZONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { mergeSportsDataBundles } from "@/services/sports-data.mapper";
 
 interface HeaderSearchProps {
   sport?: string;
@@ -29,7 +30,10 @@ export function HeaderSearch({ sport = "all", className, inputClassName, onNavig
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const deferredQuery = useDeferredValue(query.trim());
-  const { bundle, isLoading } = useSportsWindow();
+  const windowQuery = useSportsWindow();
+  const searchQuery = useSportsSearchData(deferredQuery.length >= 2);
+  const bundle = mergeSportsDataBundles(windowQuery.bundle, searchQuery.bundle);
+  const isLoading = windowQuery.isLoading || searchQuery.isLoading;
   const results = deferredQuery.length >= 2
     ? findMatchSearchResults(bundle.matches, bundle.teams, bundle.competitions, deferredQuery)
     : [];
@@ -110,7 +114,7 @@ export function HeaderSearch({ sport = "all", className, inputClassName, onNavig
             </ul>
           ) : (
             <div className="space-y-2 px-4 py-3">
-              <p className="text-sm text-muted-foreground">No hay coincidencias en los partidos recientes y próximos.</p>
+              <p className="text-sm text-muted-foreground">No hay coincidencias en los partidos disponibles.</p>
               <button type="submit" className="text-sm font-semibold text-primary hover:underline">
                 Ver resultados completos
               </button>

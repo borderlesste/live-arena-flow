@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { MatchFilters, type MatchFilter } from "@/components/matches/MatchFilters";
 import { MatchCard } from "@/components/matches/MatchCard";
-import { useSportsWindow } from "@/hooks/useSportsData";
+import { useSportsSearchData, useSportsWindow } from "@/hooks/useSportsData";
 import { EmptyState, ErrorState } from "@/components/feedback/States";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useSearchParams } from "react-router-dom";
 import { searchMatches } from "@/lib/match-search";
 import { filterFinishedEvents, filterLiveEvents, filterMatches, filterUpcomingEvents } from "@/lib/match-filters";
 import { groupMatchesByDate, sortMatchesByDateAsc } from "@/lib/format";
+import { mergeSportsDataBundles } from "@/services/sports-data.mapper";
 
 const MatchesPage = () => {
   useDocumentMeta({ title: "Partidos", description: "Partidos en vivo, próximos y resultados de todas las competiciones." });
@@ -19,7 +20,15 @@ const MatchesPage = () => {
   const routeSport = searchParams.get("sport") as MatchFilter | null;
   const [selectedFilter, setSelectedFilter] = useState<MatchFilter>(routeSport === "football" ? "football" : "all");
   const filter: MatchFilter = routeSport === "football" ? "football" : selectedFilter;
-  const { bundle, isLoading, isError, refetch } = useSportsWindow();
+  const windowQuery = useSportsWindow();
+  const searchQuery = useSportsSearchData(Boolean(query));
+  const bundle = useMemo(
+    () => mergeSportsDataBundles(windowQuery.bundle, searchQuery.bundle),
+    [windowQuery.bundle, searchQuery.bundle],
+  );
+  const isLoading = windowQuery.isLoading || (Boolean(query) && searchQuery.isLoading);
+  const isError = windowQuery.isError && (!query || searchQuery.isError);
+  const refetch = () => Promise.all([windowQuery.refetch(), ...(query ? [searchQuery.refetch()] : [])]);
   const { matches, competitions, teams } = bundle;
   const teamById = useMemo(() => new Map(teams.map((team) => [team.id, team])), [teams]);
   const competitionById = useMemo(() => new Map(competitions.map((competition) => [competition.id, competition])), [competitions]);

@@ -27,6 +27,29 @@ vi.mock("@/hooks/useSportsData", () => ({
       competitions: [{ id: "world", name: "World Championship", region: "World", sport: "football", monogram: "WC", color: "10 70% 50%", activeMatches: 0, totalMatches: 1 }],
     },
   }),
+  useSportsSearchData: () => ({
+    isLoading: false,
+    bundle: {
+      matches: [{
+        id: "sportsrc-mexico-haiti",
+        sport: "football",
+        competitionId: "world",
+        homeTeamId: "mexico",
+        awayTeamId: "haiti",
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+        startsAt: "2026-06-18T18:00:00.000Z",
+        venue: "Estadio Mundialista",
+        streams: [],
+      }],
+      teams: [
+        { id: "mexico", name: "México", shortName: "MEX", monogram: "ME", color: "20 70% 50%" },
+        { id: "haiti", name: "Haití", shortName: "HAI", monogram: "HA", color: "200 70% 50%" },
+      ],
+      competitions: [{ id: "world", name: "World Championship", region: "World", sport: "football", monogram: "WC", color: "10 70% 50%", activeMatches: 0, totalMatches: 1 }],
+    },
+  }),
 }));
 
 describe("HeaderSearch", () => {
@@ -49,5 +72,18 @@ describe("HeaderSearch", () => {
     fireEvent.change(input, { target: { value: "Barcelona" } });
 
     expect(await screen.findByText(/No hay coincidencias/i)).toBeInTheDocument();
+  });
+
+  it.each(["Mexico", "México", "Haiti", "Haití"])("encuentra selecciones del Mundial con %s", async (query) => {
+    render(<MemoryRouter><HeaderSearch /></MemoryRouter>);
+    const input = screen.getByRole("searchbox", { name: "Buscar partidos" });
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: query } });
+
+    expect(await screen.findByRole("link", { name: /México vs Haití/i })).toHaveAttribute(
+      "href",
+      "/match/sportsrc-mexico-haiti",
+    );
   });
 });
