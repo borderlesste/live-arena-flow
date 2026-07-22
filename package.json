@@ -16,6 +16,7 @@
     "build:dev": "next build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json",
     "lint": "eslint .",
+    "release:gate": "node scripts/release-gate.mjs",
     "start": "node scripts/start-production.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
@@ -110,6 +111,7 @@
     "vitest": "^3.2.4"
   },
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "^8.5.15",
+    "sharp": "0.35.3"
   }
 }

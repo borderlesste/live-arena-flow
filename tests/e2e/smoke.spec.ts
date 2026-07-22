@@ -1,40 +1,83 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 function addUtcDays(date: string, days: number): string {
   return new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000).toISOString().slice(0, 10);
 }
 
+async function enableAdminBypass(page: Page) {
+  const adminProfile = {
+    id: "qa-admin-id",
+    email: "admin@example.com",
+    displayName: "QA Admin",
+    role: "admin",
+    accountStatus: "active",
+    createdAt: new Date().toISOString(),
+    preferences: { matchReminders: false },
+  };
+  await page.route("**/api/profile", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify(adminProfile),
+  }));
+  await page.route("**/auth/v1/**", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ user: { id: adminProfile.id, email: adminProfile.email, created_at: adminProfile.createdAt, user_metadata: { display_name: adminProfile.displayName } } }),
+  }));
+  await page.route("**/rest/v1/profiles*", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify([{ id: adminProfile.id, display_name: adminProfile.displayName, account_status: "active", preferences: adminProfile.preferences, created_at: adminProfile.createdAt }]),
+  }));
+  await page.route("**/rest/v1/user_roles*", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify([{ user_id: adminProfile.id, role: "admin" }]),
+  }));
+  await page.addInitScript(() => localStorage.setItem("arena-live:session-token", "qa-admin-token"));
+}
+
 test("serves the public application and API through Next.js", async ({ page, request }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/Luis Romero Fútbol/i);
-  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /estamos afinando la cancha/i })).toBeVisible();
 
   const health = await request.get("/api/health");
   expect(health.ok()).toBe(true);
   await expect(health.json()).resolves.toMatchObject({ ok: true, service: "luis-romero-futbol-api" });
 });
 
-test("keeps the canonical stream administration route available", async ({ page }) => {
-  await page.goto("/admin/streams");
-  await expect(page).toHaveURL(/\/admin\/streams$/);
-  await expect(page.getByText(/Inicia sesi/i)).toBeVisible();
+test("keeps profile login available during maintenance", async ({ page }) => {
+  await page.goto("/profile");
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByRole("heading", { name: /accede a tu perfil/i })).toBeVisible();
 });
 
-test("protects the sponsor administration route", async ({ page }) => {
-  await page.goto("/admin/sponsors");
-  await expect(page).toHaveURL(/\/admin\/sponsors$/);
-  await expect(page.getByText(/Inicia sesi/i)).toBeVisible();
+test("wraps unauthenticated admin routes with maintenance", async ({ page }) => {
+  await page.goto("/admin/streams");
+  await expect(page).toHaveURL(/\/admin\/streams$/);
+  await expect(page.getByRole("heading", { name: /estamos afinando la cancha/i })).toBeVisible();
+});
+
+test("lets administrators bypass maintenance", async ({ page }) => {
+  await enableAdminBypass(page);
+  await page.route("**/api/sports/events*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ provider: "e2e", events: [] }) }));
+  await page.route("**/api/sports/live*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ provider: "e2e", events: [] }) }));
+  await page.route("**/api/video-sources", (route) => route.fulfill({ contentType: "application/json", body: "[]" }));
+  await page.route("**/api/admin/live-sources", (route) => route.fulfill({ contentType: "application/json", body: "[]" }));
+  await page.route("**/api/admin/live-sources/status*", (route) => route.fulfill({ contentType: "application/json", body: "[]" }));
+  await page.route("**/api/brand*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ platformName: "Luis Romero Fútbol" }) }));
+  await page.goto("/admin/streams");
+  await expect(page.getByRole("heading", { name: /fuentes de transmisión/i })).toBeVisible({ timeout: 10_000 });
 });
 
 test("keeps every planned admin route mounted and protected", async ({ page }) => {
   for (const route of ["/admin/dashboard", "/admin/matches", "/admin/users", "/admin/chat", "/admin/analytics", "/admin/settings", "/admin/audit"]) {
     await page.goto(route);
     await expect(page).toHaveURL(new RegExp(`${route}$`));
-    await expect(page.getByText(/Inicia sesi/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /estamos afinando la cancha/i })).toBeVisible();
   }
 });
 
 test("renders API matches when status filters change", async ({ page }) => {
+  await enableAdminBypass(page);
   await page.route("**/api/sports/events?*", async (route) => {
     const params = new URL(route.request().url()).searchParams;
     const date = params.get("date") ?? addUtcDays(params.get("start") ?? "2026-06-20", 1);
@@ -63,6 +106,7 @@ test("renders API matches when status filters change", async ({ page }) => {
 });
 
 test("renders live matches from the dedicated live sports API", async ({ page }) => {
+  await enableAdminBypass(page);
   await page.route("**/api/sports/live", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ provider: "e2e", events: [{
     id: "live-event",
     startsAt: "2026-06-21T12:00:00.000Z",
@@ -89,6 +133,7 @@ test("renders live matches from the dedicated live sports API", async ({ page })
 });
 
 test("keeps public sports routes consistent and loads the complete World Cup range", async ({ page }) => {
+  await enableAdminBypass(page);
   await page.route("**/api/sports/events?*", async (route) => {
     const url = new URL(route.request().url());
     const start = url.searchParams.get("start");
@@ -158,6 +203,7 @@ test("keeps public sports routes consistent and loads the complete World Cup ran
 });
 
 test("keeps mobile player overlays outside the consent controls", async ({ page }) => {
+  await enableAdminBypass(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route("**/api/sports/events?*", (route) => {
     const params = new URL(route.request().url()).searchParams;

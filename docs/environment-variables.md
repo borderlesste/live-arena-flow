@@ -8,6 +8,7 @@ This document lists names and responsibilities only. Do not commit real values.
 | --- | ---: | --- |
 | `NEXT_PUBLIC_APP_URL` | Required in production | Canonical HTTPS origin used for metadata and authentication links. For this deployment use `https://www.luisromerofutbol.com`; never configure a loopback URL in Vercel Production. |
 | `NEXT_PUBLIC_API_BASE_URL` | Recommended | Defaults to `/api`. |
+| `NEXT_PUBLIC_MAINTENANCE_MODE` | Operational | `true` wraps public routes in the maintenance page and only lets `super_admin`/`admin` accounts bypass it. Defaults to `true` in this checkout so the next production deploy activates maintenance immediately. Set `false` to reopen the site. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Recommended | Browser-safe project URL. If omitted, Next retrieves it from the backend through `API_INTERNAL_URL`. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Recommended | Browser-safe publishable key. If omitted, Next retrieves it from the backend. Accepts modern `sb_publishable_…` and valid public `anon` JWTs. |
 | `NEXT_PUBLIC_CLOUDFLARE_WEB_ANALYTICS_TOKEN` | Web Analytics | Public site token used by the Cloudflare beacon. It is not an API credential. |

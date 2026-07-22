@@ -22,7 +22,7 @@ Hosting backend: Render-compatible persistent Node service by convention. No `re
 
 DNS/CDN/WAF: Cloudflare variables are present, but no Worker, Pages, R2, WAF or cache rule config is committed.
 
-Repositorio y CI/CD: GitHub remote exists and `.github/workflows/ci.yml` now validates lint, typecheck, tests, E2E and build.
+Repositorio y CI/CD: GitHub remote exists and `.github/workflows/ci.yml` now runs the shared `npm run release:gate` used locally before publishing to `main`.
 
 Workers: None committed.
 

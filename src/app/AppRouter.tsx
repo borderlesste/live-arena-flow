@@ -1,11 +1,13 @@
-import { Suspense, lazy, useEffect } from "react";
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Suspense, lazy, useEffect, type ReactNode } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { SkeletonLoader } from "@/components/feedback/SkeletonLoader";
 import { MatchReminderManager } from "@/components/notifications/MatchReminderManager";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { useAuth } from "@/hooks/useAuth";
+import { publicEnv } from "@/config/env";
 import { subscribeToAuth } from "@/services/auth.service";
 
 import HomePage from "@/views/HomePage";
@@ -58,55 +60,70 @@ function PageFallback() {
   );
 }
 
+function MaintenanceGate({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const location = useLocation();
+  const pathname = location.pathname;
+  const maintenanceEnabled = publicEnv.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
+  const canBypassMaintenance = auth.profile?.role === "super_admin" || auth.profile?.role === "admin";
+  const authPath = pathname === "/profile" || pathname.startsWith("/auth/");
+
+  if (!maintenanceEnabled || canBypassMaintenance || authPath) return <>{children}</>;
+  if (auth.isLoading) return <PageFallback />;
+  return <MaintenancePage />;
+}
+
 export function AppRouter() {
   return (
     <div className="flex min-h-dvh flex-col">
       <AuthEventRouter />
       <MatchReminderManager />
-      <Header />
-      <main id="contenido" className="flex-1 pb-24 lg:pb-0">
-        <Suspense fallback={<PageFallback />}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/live" element={<LivePage />} />
-            <Route path="/matches" element={<MatchesPage />} />
-            <Route path="/competitions" element={<CompetitionsPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/results" element={<ResultsPage />} />
-            <Route path="/mundial" element={<WorldChampionshipPage />} />
-            <Route path="/world-championship" element={<WorldChampionshipPage />} />
-            <Route path="/match/:id" element={<MatchDetailsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/noticias" element={<NewsPage />} />
-            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/auth/confirm" element={<AuthConfirmationPage />} />
-            <Route path="/auth/update-password" element={<UpdatePasswordPage />} />
-            <Route path="/admin" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/dashboard" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/streams" element={<AdminLayout><AdminPage /></AdminLayout>} />
-            <Route path="/admin/news" element={<AdminLayout><AdminNewsPage /></AdminLayout>} />
-            <Route path="/admin/matches" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/sponsors" element={<AdminLayout><AdminSponsorsPage /></AdminLayout>} />
-            <Route path="/admin/users" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/chat" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/analytics" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/settings" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/admin/audit" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
-            <Route path="/maintenance" element={<MaintenancePage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/cookies" element={<CookiesPage />} />
-            <Route path="/community-rules" element={<CommunityRulesPage />} />
-            <Route path="/contact" element={<ContactPage />} />
-            <Route path="/broadcast-rights" element={<BroadcastRightsPage />} />
-            <Route path="/sponsors" element={<SponsorsInfoPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </main>
-      <Footer />
-      <BottomNav />
+      <MaintenanceGate>
+        <Header />
+        <main id="contenido" className="flex-1 pb-24 lg:pb-0">
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/live" element={<LivePage />} />
+              <Route path="/matches" element={<MatchesPage />} />
+              <Route path="/competitions" element={<CompetitionsPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/results" element={<ResultsPage />} />
+              <Route path="/mundial" element={<WorldChampionshipPage />} />
+              <Route path="/world-championship" element={<WorldChampionshipPage />} />
+              <Route path="/match/:id" element={<MatchDetailsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/noticias" element={<NewsPage />} />
+              <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/auth/confirm" element={<AuthConfirmationPage />} />
+              <Route path="/auth/update-password" element={<UpdatePasswordPage />} />
+              <Route path="/admin" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/dashboard" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/streams" element={<AdminLayout><AdminPage /></AdminLayout>} />
+              <Route path="/admin/news" element={<AdminLayout><AdminNewsPage /></AdminLayout>} />
+              <Route path="/admin/matches" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/sponsors" element={<AdminLayout><AdminSponsorsPage /></AdminLayout>} />
+              <Route path="/admin/users" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/chat" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/analytics" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/settings" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/admin/audit" element={<AdminLayout><AdminOperationsPage /></AdminLayout>} />
+              <Route path="/maintenance" element={<MaintenancePage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/cookies" element={<CookiesPage />} />
+              <Route path="/community-rules" element={<CommunityRulesPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/broadcast-rights" element={<BroadcastRightsPage />} />
+              <Route path="/sponsors" element={<SponsorsInfoPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </main>
+        <Footer />
+        <BottomNav />
+      </MaintenanceGate>
     </div>
   );
 }

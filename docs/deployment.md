@@ -1,5 +1,7 @@
 # Deployment
 
+Before publishing to `main`, run `npm run release:gate`. This is the same release gate used by GitHub CI and covers the Vercel failures previously seen in production: Node 24 runtime parity, production dependency audit, lint, app/server typecheck, unit/integration tests, `next build` and smoke E2E.
+
 Deploy the Next.js frontend to Vercel with `npm run build`. Configure `NEXT_PUBLIC_*` only with browser-safe values. In Vercel Production, set `API_INTERNAL_URL=https://live-arena-flow.onrender.com`, without the `/api` suffix. `localhost` and `127.0.0.1` are invalid because each Vercel Function runs in an isolated environment without the backend process.
 
 Deploy `server/index.ts` to Render as the API service. Configure Supabase, `SPORTSRC_API_KEY` and stream encryption secrets only in Render. Never expose service-role keys, provider keys, ingest URLs or stream keys through `NEXT_PUBLIC_*` variables.

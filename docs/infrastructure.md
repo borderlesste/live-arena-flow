@@ -12,7 +12,7 @@
 
 - Local evidence: `next.config.mjs` rewrites `/api/:path*` to `API_INTERNAL_URL`.
 - No `vercel.json` is committed.
-- Required dashboard checks: project root, Node 22 support, `npm run build`, public `NEXT_PUBLIC_*` values only, and `API_INTERNAL_URL` pointing to backend.
+- Required dashboard checks: project root, Node 24 support, `npm run build`, public `NEXT_PUBLIC_*` values only, and `API_INTERNAL_URL` pointing to backend.
 
 Do not store these on Vercel:
 
